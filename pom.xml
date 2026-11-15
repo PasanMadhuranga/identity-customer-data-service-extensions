@@ -368,7 +368,7 @@
         <!-- Maven Plugin Versions -->
         <carbon.p2.plugin.version>5.1.2</carbon.p2.plugin.version>
         <maven.compiler.plugin.version>3.8.0</maven.compiler.plugin.version>
-        <maven.bundle.plugin.version>6.0.0</maven.bundle.plugin.version>
+        <maven.bundle.plugin.version>5.1.9</maven.bundle.plugin.version>
         <maven.buildnumber.plugin.version>1.4</maven.buildnumber.plugin.version>
         <maven-war-plugin.version>3.3.1</maven-war-plugin.version>
 
