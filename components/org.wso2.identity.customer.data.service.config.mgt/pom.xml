@@ -126,6 +126,10 @@
                             !org.wso2.identity.cds.config.mgt.internal,
                             org.wso2.identity.cds.config.mgt.*;version="${project.version}"
                         </Export-Package>
+                        <!-- CDSConfigService is registered programmatically, so declare it for p2 resolution. -->
+                        <Provide-Capability>
+                            osgi.service;objectClass:List&lt;String&gt;="org.wso2.identity.cds.config.mgt.CDSConfigService"
+                        </Provide-Capability>
                         <Import-Package>
                             org.apache.commons.logging;version="${commons-logging.osgi.version.range}",
                             org.apache.commons.lang;version="${commons-lang.wso2.osgi.version.range}",
