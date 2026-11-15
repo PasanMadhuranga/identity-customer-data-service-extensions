@@ -19,6 +19,7 @@
 package org.wso2.identity.cds.config.mgt.internal;
 
 import org.apache.commons.lang.StringUtils;
+import org.osgi.annotation.bundle.Capability;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.configuration.mgt.core.ConfigurationManager;
 import org.wso2.carbon.identity.configuration.mgt.core.exception.ConfigurationManagementException;
@@ -55,6 +56,13 @@ import static org.wso2.identity.cds.config.mgt.constant.CDSConfigMgtConstants.Er
  * Implementation of {@link CDSConfigService}. The value is in the config store: resource type CDS_CONFIGURATION,
  * resource cds-config, attribute enabled.
  */
+@Capability(
+        namespace = "osgi.service",
+        attribute = {
+                "objectClass=org.wso2.identity.cds.config.mgt.CDSConfigService",
+                "service.scope=singleton"
+        }
+)
 public class CDSConfigServiceImpl implements CDSConfigService {
 
     private static final String CDS_CONFIG_RESOURCE_TYPE = "CDS_CONFIGURATION";

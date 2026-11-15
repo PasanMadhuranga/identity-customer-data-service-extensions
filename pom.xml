@@ -96,6 +96,12 @@
                 <version>${equinox.osgi.services.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.osgi</groupId>
+                <artifactId>osgi.annotation</artifactId>
+                <version>${osgi.annotation.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
                 <groupId>commons-logging</groupId>
                 <artifactId>commons-logging</artifactId>
                 <version>${commons.logging.version}</version>
@@ -362,7 +368,7 @@
         <!-- Maven Plugin Versions -->
         <carbon.p2.plugin.version>5.1.2</carbon.p2.plugin.version>
         <maven.compiler.plugin.version>3.8.0</maven.compiler.plugin.version>
-        <maven.bundle.plugin.version>3.2.0</maven.bundle.plugin.version>
+        <maven.bundle.plugin.version>6.0.0</maven.bundle.plugin.version>
         <maven.buildnumber.plugin.version>1.4</maven.buildnumber.plugin.version>
         <maven-war-plugin.version>3.3.1</maven-war-plugin.version>
 
@@ -384,6 +390,7 @@
 
         <!-- OSGi -->
         <equinox.osgi.services.version>3.5.100.v20160504-1419</equinox.osgi.services.version>
+        <osgi.annotation.version>8.1.0</osgi.annotation.version>
         <osgi.framework.imp.pkg.version.range>[1.7.0, 2.0.0)</osgi.framework.imp.pkg.version.range>
         <osgi.service.component.imp.pkg.version.range>[1.2.0, 2.0.0)</osgi.service.component.imp.pkg.version.range>
         <commons-logging.osgi.version.range>[1.2,2.0)</commons-logging.osgi.version.range>
