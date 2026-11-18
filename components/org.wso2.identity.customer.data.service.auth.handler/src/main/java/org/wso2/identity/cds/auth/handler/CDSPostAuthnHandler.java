@@ -41,7 +41,6 @@ public class CDSPostAuthnHandler extends AbstractPostAuthnHandler {
 
     private static final Log LOG = LogFactory.getLog(CDSPostAuthnHandler.class);
     private static final String CDS_PROFILE = "cds_profile";
-    private static final String ANONYMOUS_PROFILE_TRACKER = "anonymous_profile_tracker";
 
     @Override
     public PostAuthnHandlerFlowStatus handle(HttpServletRequest request,
@@ -53,7 +52,7 @@ public class CDSPostAuthnHandler extends AbstractPostAuthnHandler {
             return PostAuthnHandlerFlowStatus.SUCCESS_COMPLETED;
         }
 
-        resolveCDSProfile(request, context).ifPresent(val -> {
+        resolveCDSProfile(request).ifPresent(val -> {
             context.setProperty(CDS_PROFILE, val);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Setting cds_profile cookie in authentication context");
@@ -62,27 +61,25 @@ public class CDSPostAuthnHandler extends AbstractPostAuthnHandler {
         return PostAuthnHandlerFlowStatus.SUCCESS_COMPLETED;
     }
 
-    private Optional<String> resolveCDSProfile(HttpServletRequest request, AuthenticationContext context) {
+    /**
+     * Resolve the CDS profile from the cds_profile cookie of the request. The value is taken only from the cookie
+     * that the browser sends, and not from the parameters of the authorization request.
+     *
+     * @param request HTTP request.
+     * @return The cds_profile cookie value, if the request has a non-blank one.
+     */
+    private Optional<String> resolveCDSProfile(HttpServletRequest request) {
 
-        if (request.getCookies() != null) {
-            for (javax.servlet.http.Cookie cookie : request.getCookies()) {
-                if (CDS_PROFILE.equals(cookie.getName())) {
-                    String value = cookie.getValue();
-                    if (StringUtils.isNotBlank(value)) {
-                        return Optional.of(value);
-                    }
-                    break;
-                }
-            }
+        if (request.getCookies() == null) {
+            return Optional.empty();
         }
-        // The post-auth handler runs against the sessionDataKey callback request, not the
-        // original /oauth2/authorize request, so request.getParameter() no longer carries
-        // ANONYMOUS_PROFILE_TRACKER. The original /authorize query parameters are preserved on the
-        // AuthenticationContext.
-        if (context.getAuthenticationRequest() != null) {
-            String[] values = context.getAuthenticationRequest().getRequestQueryParam(ANONYMOUS_PROFILE_TRACKER);
-            if (values != null && values.length > 0) {
-                return Optional.ofNullable(values[0]);
+        for (javax.servlet.http.Cookie cookie : request.getCookies()) {
+            if (CDS_PROFILE.equals(cookie.getName())) {
+                String value = cookie.getValue();
+                if (StringUtils.isNotBlank(value)) {
+                    return Optional.of(value);
+                }
+                break;
             }
         }
         return Optional.empty();
