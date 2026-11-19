@@ -45,6 +45,7 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
 
 public class IdentityEventHandlerTest {
 
@@ -52,6 +53,7 @@ public class IdentityEventHandlerTest {
     private static final String USER_ID = "8a6e3c1f-6c1b-4d5e-9a3e-0e5c2b7d9f10";
     private static final String CONTEXT_TRACKER = "c0ntext-tracker";
     private static final String CLAIM_TRACKER = "cl4im-tracker";
+    private static final String TRACKER_CLAIM = "http://wso2.org/claims/cdsProfile";
 
     private IdentityEventHandler handler;
     private CDSConfigService cdsConfigService;
@@ -100,21 +102,21 @@ public class IdentityEventHandlerTest {
     }
 
     @Test
-    public void testTrackerFromTheClaimWhenTheAnonymousUserHasNoTracker() throws Exception {
+    public void testTrackerClaimIsIgnoredWhenTheAnonymousUserHasNoTracker() throws Exception {
 
         setAnonymousUser(null);
 
         handler.handleEvent(postAddUserEvent(CLAIM_TRACKER));
 
-        assertEquals(capturedIdentityDataSyncPayload().get(Constants.PROFILE_COOKIE), CLAIM_TRACKER);
+        assertProfileSyncWithoutTracker();
     }
 
     @Test
-    public void testTrackerFromTheClaimWhenThereIsNoAnonymousUser() throws Exception {
+    public void testTrackerClaimIsIgnoredWhenThereIsNoAnonymousUser() throws Exception {
 
         handler.handleEvent(postAddUserEvent(CLAIM_TRACKER));
 
-        assertEquals(capturedIdentityDataSyncPayload().get(Constants.PROFILE_COOKIE), CLAIM_TRACKER);
+        assertProfileSyncWithoutTracker();
     }
 
     @Test
@@ -124,12 +126,7 @@ public class IdentityEventHandlerTest {
 
         handler.handleEvent(postAddUserEvent(null));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
-        cdsClient.verify(() -> CDSClient.triggerProfileSync(eq("POST_ADD_USER"), payload.capture(),
-                eq(TENANT_DOMAIN)));
-        cdsClient.verify(() -> CDSClient.triggerIdentityDataSync(anyString(), anyMap(), anyString()), never());
-        assertEquals(payload.getValue().get(Constants.PROFILE_COOKIE), null);
+        assertProfileSyncWithoutTracker();
     }
 
     private void setAnonymousUser(String anonymousProfileTracker) {
@@ -145,12 +142,22 @@ public class IdentityEventHandlerTest {
         claims.put(Constants.USER_ID_CLAIM, USER_ID);
         claims.put("http://wso2.org/claims/emailaddress", "alex@example.com");
         if (trackerClaimValue != null) {
-            claims.put(Constants.PROFILE_COOKIE_CLAIM, trackerClaimValue);
+            claims.put(TRACKER_CLAIM, trackerClaimValue);
         }
         Map<String, Object> properties = new HashMap<>();
         properties.put(Constants.TENANT_DOMAIN, TENANT_DOMAIN);
         properties.put(Constants.USER_CLAIMS_PROPERTY, claims);
         return new Event("POST_ADD_USER", properties);
+    }
+
+    private void assertProfileSyncWithoutTracker() {
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
+        cdsClient.verify(() -> CDSClient.triggerProfileSync(eq("POST_ADD_USER"), payload.capture(),
+                eq(TENANT_DOMAIN)));
+        cdsClient.verify(() -> CDSClient.triggerIdentityDataSync(anyString(), anyMap(), anyString()), never());
+        assertNull(payload.getValue().get(Constants.PROFILE_COOKIE));
     }
 
     private Map<String, Object> capturedIdentityDataSyncPayload() {

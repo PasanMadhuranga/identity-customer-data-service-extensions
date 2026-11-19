@@ -41,7 +41,6 @@ import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.POST_S
 import static org.wso2.identity.cds.event.handler.Constants.CLAIMS;
 import static org.wso2.identity.cds.event.handler.Constants.ORG_HANDLE;
 import static org.wso2.identity.cds.event.handler.Constants.PROFILE_COOKIE;
-import static org.wso2.identity.cds.event.handler.Constants.PROFILE_COOKIE_CLAIM;
 import static org.wso2.identity.cds.event.handler.Constants.TENANT_DOMAIN;
 import static org.wso2.identity.cds.event.handler.Constants.USER_CLAIMS_PROPERTY;
 import static org.wso2.identity.cds.event.handler.Constants.USER_ID;
@@ -83,7 +82,7 @@ public class IdentityEventHandler extends AbstractEventHandler {
                     return;
                 }
 
-                String profileCookie = resolveAnonymousProfileTracker(filteredUserClaims);
+                String profileCookie = resolveAnonymousProfileTracker();
                 String userId = (String) filteredUserClaims.get(USER_ID_CLAIM);
                 Map<String, Object> profileSyncPayload = new HashMap<>();
                 profileSyncPayload.put(PROFILE_COOKIE, profileCookie);
@@ -152,23 +151,21 @@ public class IdentityEventHandler extends AbstractEventHandler {
     }
 
     /**
-     * Resolves the anonymous profile tracker of the user that is being added. The tracker is read from the
-     * anonymous user in the identity context. If the identity context does not have it, the value of the legacy
-     * cdsProfile claim is used.
+     * Resolves the anonymous profile tracker of the user that is being added, from the anonymous user in the
+     * identity context.
      *
-     * @param userClaims The WSO2 claims of the user.
      * @return The anonymous profile tracker, or null if it is not available.
      */
-    private String resolveAnonymousProfileTracker(Map<String, Object> userClaims) {
+    private String resolveAnonymousProfileTracker() {
 
         AnonymousUser anonymousUser = IdentityContext.getThreadLocalIdentityContext().getAnonymousUser();
-        if (anonymousUser != null && StringUtils.isNotBlank(anonymousUser.getAnonymousProfileTracker())) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Resolved the anonymous profile tracker from the anonymous user in the identity context.");
-            }
-            return anonymousUser.getAnonymousProfileTracker();
+        if (anonymousUser == null || StringUtils.isBlank(anonymousUser.getAnonymousProfileTracker())) {
+            return null;
         }
-        return (String) userClaims.get(PROFILE_COOKIE_CLAIM);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Resolved the anonymous profile tracker from the anonymous user in the identity context.");
+        }
+        return anonymousUser.getAnonymousProfileTracker();
     }
 
     private boolean isCDSEnabled(String tenantDomain) {
