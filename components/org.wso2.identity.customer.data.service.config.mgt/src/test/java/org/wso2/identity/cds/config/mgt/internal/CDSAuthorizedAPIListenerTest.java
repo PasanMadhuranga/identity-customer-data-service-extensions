@@ -150,6 +150,27 @@ public class CDSAuthorizedAPIListenerTest {
     }
 
     @Test
+    public void testAuthorizesTheApplicationOfCDSToIntrospectTokens() throws Exception {
+
+        List<AuthorizedScopes> authorizedScopes = new ArrayList<>();
+        listener.postGetAuthorizedScopes(authorizedScopes, CDS_APP, TENANT);
+        Set<String> granted = new HashSet<>();
+        for (AuthorizedScopes scopes : authorizedScopes) {
+            granted.addAll(scopes.getScopes());
+        }
+        assertTrue(granted.contains("internal_oauth2_introspect"),
+                "CDS introspects the tokens of its requests with a token that has internal_oauth2_introspect.");
+
+        List<AuthorizedAPI> authorizedAPIs = new ArrayList<>();
+        listener.postGetAuthorizedAPIs(authorizedAPIs, CDS_APP, TENANT);
+        Set<String> apis = new HashSet<>();
+        for (AuthorizedAPI authorizedAPI : authorizedAPIs) {
+            apis.add(authorizedAPI.getAPIId());
+        }
+        assertTrue(apis.contains("id:/oauth2/introspect"));
+    }
+
+    @Test
     public void testAddsOnlyTheScopesTheApplicationLacks() throws Exception {
 
         List<AuthorizedScopes> authorizedScopes = new ArrayList<>();
