@@ -53,7 +53,10 @@ public class CDSAuthorizedAPIListener extends AbstractAuthorizedAPIManagementLis
     /**
      * The management APIs CDS asks a token for, with the scopes it asks for. They have to match the scope of
      * FetchToken in CDS. The /o APIs are those of a sub organization, which a token of the shared application
-     * reaches.
+     * reaches. The OAuth2 Introspection API gives the scope that CDS asks a token for to introspect the tokens of
+     * its requests: the Identity Server takes no client authentication at its introspection endpoint by default,
+     * only a bearer token with that scope. The endpoint of the primary organization introspects the tokens of its
+     * sub organizations too, so CDS needs no /o introspection scope.
      */
     static final Map<String, List<String>> MANAGEMENT_API_SCOPES;
 
@@ -67,6 +70,7 @@ public class CDSAuthorizedAPIListener extends AbstractAuthorizedAPIManagementLis
         scopes.put("/o/api/server/v1/claim-dialects", Collections.singletonList("internal_org_claim_meta_view"));
         scopes.put("/o/scim2/Users", Arrays.asList("internal_org_user_mgt_list", "internal_org_user_mgt_view"));
         scopes.put("/o/api/server/v1/organizations", Collections.singletonList("internal_org_organization_view"));
+        scopes.put("/oauth2/introspect", Collections.singletonList("internal_oauth2_introspect"));
         MANAGEMENT_API_SCOPES = Collections.unmodifiableMap(scopes);
     }
 
