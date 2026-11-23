@@ -48,14 +48,14 @@ public class AuthListenerServiceComponent {
         AuthEventListener authEventListener = new AuthEventListener();
         context.getBundleContext().registerService(AbstractEventHandler.class.getName(), authEventListener,
                 null);
-        LOG.debug("CDS post authentication listener activated");
+        LOG.debug("CDD post authentication listener activated");
     }
 
     @Deactivate
     protected void deactivate(ComponentContext context) {
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("CDS post authentication listener deactivated");
+            LOG.debug("CDD post authentication listener deactivated");
         }
     }
 

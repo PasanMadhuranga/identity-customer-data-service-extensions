@@ -83,7 +83,7 @@ public class CDSClient {
             String url = buildProfileSyncAPI(tenant);
             doPost(url, json, tenant, "identity-data-sync");
         } catch (IOException e) {
-            log.warn("I/O error while triggering CDS identity data sync. tenant="
+            log.warn("I/O error while triggering CDD identity data sync. tenant="
                     + Utils.sanitizeForLog(tenant), e);
         } catch (OrganizationManagementException e) {
             logUnresolvedPath("identity data sync", tenant, e);
@@ -99,7 +99,7 @@ public class CDSClient {
             String url = buildProfileSyncAPI(tenant);
             doPost(url, json, tenant, "profile-sync");
         } catch (IOException e) {
-            log.warn("I/O error while triggering CDS profile sync. tenant="
+            log.warn("I/O error while triggering CDD profile sync. tenant="
                     + Utils.sanitizeForLog(tenant), e);
         } catch (OrganizationManagementException e) {
             logUnresolvedPath("profile sync", tenant, e);
@@ -112,7 +112,7 @@ public class CDSClient {
             String url = buildProfileSchemaSyncAPI(tenant);
             doPost(url, json, tenant, "profile-schema-sync");
         } catch (IOException e) {
-            log.warn("I/O error while triggering CDS profile schema sync. tenant="
+            log.warn("I/O error while triggering CDD profile schema sync. tenant="
                     + Utils.sanitizeForLog(tenant), e);
         } catch (OrganizationManagementException e) {
             logUnresolvedPath("profile schema sync", tenant, e);
@@ -128,7 +128,7 @@ public class CDSClient {
                     OrganizationPathResolver.pathOf(tenant));
             doPost(url, json, tenant, "organization-sync");
         } catch (IOException e) {
-            log.warn("I/O error while triggering CDS organization sync. tenant="
+            log.warn("I/O error while triggering CDD organization sync. tenant="
                     + Utils.sanitizeForLog(tenant), e);
         } catch (OrganizationManagementException e) {
             logUnresolvedPath("organization sync", tenant, e);
@@ -137,8 +137,8 @@ public class CDSClient {
 
     private static void logUnresolvedPath(String operation, String tenant, OrganizationManagementException e) {
 
-        log.error("Could not resolve the CDS path of the organization for tenant: " +
-                Utils.sanitizeForLog(tenant) + ". The CDS " + operation + " is not sent.", e);
+        log.error("Could not resolve the CDD path of the organization for tenant: " +
+                Utils.sanitizeForLog(tenant) + ". The CDD " + operation + " is not sent.", e);
     }
 
     /**
@@ -155,7 +155,7 @@ public class CDSClient {
         String serviceURL = Utils.getCDSServiceURL();
         String credentials = Utils.getBase64EncodedCredentials();
         if (StringUtils.isBlank(serviceURL) || StringUtils.isBlank(credentials)) {
-            String error = "The Customer Data Service is not configured.";
+            String error = "The Customer Data Directory is not configured.";
             throw new CDSServerException(error, error, null);
         }
 
@@ -172,7 +172,7 @@ public class CDSClient {
                 int statusCode = response.getStatusLine().getStatusCode();
                 if (statusCode == HTTP_OK) {
                     if (log.isDebugEnabled()) {
-                        log.debug("CDS config update succeeded for tenant: " + sanitizedTenant);
+                        log.debug("CDD config update succeeded for tenant: " + sanitizedTenant);
                     }
                     return;
                 }
@@ -183,7 +183,7 @@ public class CDSClient {
                             StandardCharsets.UTF_8);
                 }
                 CdsError cdsError = parseCdsError(responseBody);
-                String description = String.format("The Customer Data Service returned status %d, code %s: %s",
+                String description = String.format("The Customer Data Directory returned status %d, code %s: %s",
                         statusCode, cdsError.code, cdsError.description);
                 if (statusCode >= HTTP_CLIENT_ERROR_MIN && statusCode < HTTP_SERVER_ERROR_MIN) {
                     throw new CDSClientException(cdsError.message, description, cdsError.code);
@@ -191,9 +191,9 @@ public class CDSClient {
                 throw new CDSServerException(cdsError.message, description, cdsError.code);
             }
         } catch (IOException e) {
-            log.warn("I/O error while updating the CDS config. tenant=" + sanitizedTenant, e);
-            throw new CDSServerException("The Customer Data Service cannot be reached.",
-                    "An I/O error occurred while the CDS configuration was sent.", null, e);
+            log.warn("I/O error while updating the CDD config. tenant=" + sanitizedTenant, e);
+            throw new CDSServerException("The Customer Data Directory cannot be reached.",
+                    "An I/O error occurred while the CDD configuration was sent.", null, e);
         }
     }
 
@@ -217,7 +217,7 @@ public class CDSClient {
 
                 if (statusCode == 200 || statusCode == 204) {
                     if (log.isDebugEnabled()) {
-                        log.debug("CDS " + Utils.sanitizeForLog(operation) + " succeeded for tenant: " +
+                        log.debug("CDD " + Utils.sanitizeForLog(operation) + " succeeded for tenant: " +
                                 sanitizedTenant);
                     }
                     return;
@@ -227,13 +227,13 @@ public class CDSClient {
 
                 if (isCdsNotEnabled(statusCode, cdsError.code)) {
                     if (log.isDebugEnabled()) {
-                        log.debug("CDS " + Utils.sanitizeForLog(operation) + " skipped as CDS is not enabled for " +
+                        log.debug("CDD " + Utils.sanitizeForLog(operation) + " skipped as CDD is not enabled for " +
                                 "tenant: " + sanitizedTenant);
                     }
                     return;
                 }
 
-                log.warn(String.format("CDS %s failed for tenant=%s with status=%d, code=%s, message=%s, " +
+                log.warn(String.format("CDD %s failed for tenant=%s with status=%d, code=%s, message=%s, " +
                                 "description=%s",
                         Utils.sanitizeForLog(operation),
                         sanitizedTenant,
@@ -276,7 +276,7 @@ public class CDSClient {
         String serviceURL = Utils.getCDSServiceURL();
         String credentials = Utils.getBase64EncodedCredentials();
         if (StringUtils.isBlank(serviceURL) || StringUtils.isBlank(credentials)) {
-            String error = "The Customer Data Service is not configured.";
+            String error = "The Customer Data Directory is not configured.";
             throw new CDSServerException(error, error, null);
         }
 
@@ -297,7 +297,7 @@ public class CDSClient {
                 int statusCode = response.getStatusLine().getStatusCode();
                 if (statusCode == HTTP_OK || statusCode == HTTP_NO_CONTENT) {
                     if (log.isDebugEnabled()) {
-                        log.debug("CDS service credentials sync succeeded for tenant: " + sanitizedTenant);
+                        log.debug("CDD service credentials sync succeeded for tenant: " + sanitizedTenant);
                     }
                     return true;
                 }
@@ -316,7 +316,7 @@ public class CDSClient {
                         cdsError.code)) {
                     return false;
                 }
-                String description = String.format("The Customer Data Service returned status %d, code %s: %s",
+                String description = String.format("The Customer Data Directory returned status %d, code %s: %s",
                         statusCode, cdsError.code, cdsError.description);
                 if (statusCode >= HTTP_CLIENT_ERROR_MIN && statusCode < HTTP_SERVER_ERROR_MIN) {
                     throw new CDSClientException(cdsError.message, description, cdsError.code);
@@ -324,8 +324,8 @@ public class CDSClient {
                 throw new CDSServerException(cdsError.message, description, cdsError.code);
             }
         } catch (IOException e) {
-            log.warn("I/O error while syncing the CDS service credentials. tenant=" + sanitizedTenant, e);
-            throw new CDSServerException("The Customer Data Service cannot be reached.",
+            log.warn("I/O error while syncing the CDD service credentials. tenant=" + sanitizedTenant, e);
+            throw new CDSServerException("The Customer Data Directory cannot be reached.",
                     "An I/O error occurred while the service credentials were sent.", null, e);
         }
     }

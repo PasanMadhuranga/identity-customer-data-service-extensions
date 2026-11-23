@@ -46,13 +46,13 @@ public class CDSPostAuthHandlerComponent {
         CDSPostAuthnHandler cdsPostAuthnHandler  = new CDSPostAuthnHandler();
         ctx.getBundleContext().registerService(PostAuthenticationHandler.class.getName(), cdsPostAuthnHandler,
                 null);
-        log.info("CDS Post Authentication handler activated successfully.");
+        log.info("CDD Post Authentication handler activated successfully.");
     }
 
     @Deactivate
     protected void deactivate(ComponentContext ctx) {
         if (log.isDebugEnabled()) {
-            log.debug("CDS Post Authentication handler is deactivated");
+            log.debug("CDD Post Authentication handler is deactivated");
         }
     }
 

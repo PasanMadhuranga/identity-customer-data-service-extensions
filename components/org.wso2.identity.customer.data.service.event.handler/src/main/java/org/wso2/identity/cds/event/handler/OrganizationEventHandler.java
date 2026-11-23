@@ -82,7 +82,7 @@ public class OrganizationEventHandler extends AbstractEventHandler {
         String orgId = resolveOrganizationId(event.getEventProperties());
         if (StringUtils.isBlank(orgId)) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Skipping CDS organization sync: no organization ID in event " + event.getEventName());
+                LOG.debug("Skipping CDD organization sync: no organization ID in event " + event.getEventName());
             }
             return;
         }
@@ -92,7 +92,7 @@ public class OrganizationEventHandler extends AbstractEventHandler {
         payload.put(ORG_ID, orgId);
         if (LOG.isDebugEnabled()) {
             LOG.debug("Sending organization event " + cdsEvent + " for organization " + Utils.sanitizeForLog(orgId)
-                    + " to CDS through tenant " + Utils.sanitizeForLog(tenantDomain));
+                    + " to CDD through tenant " + Utils.sanitizeForLog(tenantDomain));
         }
         executor.execute(() -> CDSClient.triggerOrganizationSync(payload, tenantDomain));
     }
