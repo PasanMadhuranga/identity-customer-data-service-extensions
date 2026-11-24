@@ -149,9 +149,9 @@ public class CDSServiceCredentialsManager {
             String clientSecret = getOAuthAdminService().updateAndRetrieveOauthSecretKey(clientId)
                     .getOauthConsumerSecret();
             if (CDSClient.syncServiceCredentials(tenantDomain, organizationId, clientId, clientSecret)) {
-                log.info("Sent the service credentials of tenant: " + sanitizedTenant + " to CDS.");
+                log.info("Sent the service credentials of tenant: " + sanitizedTenant + " to CDD.");
             } else if (log.isDebugEnabled()) {
-                log.debug("CDS stores no service credentials, so none are sent for tenant: " + sanitizedTenant);
+                log.debug("CDD stores no service credentials, so none are sent for tenant: " + sanitizedTenant);
             }
         } catch (CDSException e) {
             throw serverException(e, sanitizedTenant, e.getDescription());

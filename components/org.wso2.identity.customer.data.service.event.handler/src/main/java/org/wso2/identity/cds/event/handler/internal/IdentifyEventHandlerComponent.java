@@ -50,14 +50,14 @@ public class IdentifyEventHandlerComponent {
         ctx.getBundleContext().registerService(AbstractEventHandler.class.getName(), claimEventHandler, null);
         OrganizationEventHandler organizationEventHandler = new OrganizationEventHandler();
         ctx.getBundleContext().registerService(AbstractEventHandler.class.getName(), organizationEventHandler, null);
-        log.info("CDS EventHandlers activated successfully.");
+        log.info("CDD EventHandlers activated successfully.");
     }
 
     @Deactivate
     protected void deactivate(ComponentContext ctx) {
 
         if (log.isDebugEnabled()) {
-            log.debug("CDS EventHandlers deactivated.");
+            log.debug("CDD EventHandlers deactivated.");
         }
     }
 

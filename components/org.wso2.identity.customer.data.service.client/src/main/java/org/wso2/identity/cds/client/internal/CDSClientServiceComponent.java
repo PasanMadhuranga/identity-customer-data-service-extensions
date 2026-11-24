@@ -41,7 +41,7 @@ public class CDSClientServiceComponent {
     protected void activate(ComponentContext context) {
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("CDS client component is activated.");
+            LOG.debug("CDD client component is activated.");
         }
     }
 
@@ -49,7 +49,7 @@ public class CDSClientServiceComponent {
     protected void deactivate(ComponentContext context) {
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("CDS client component is deactivated.");
+            LOG.debug("CDD client component is deactivated.");
         }
     }
 

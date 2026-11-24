@@ -35,21 +35,21 @@ public class CDSConfigMgtConstants {
     public enum ErrorMessages {
 
         ERROR_CODE_CDS_NOT_ENABLED("60001",
-                "CDS is not enabled.",
-                "The Customer Data Service is not enabled for the server."),
+                "CDD is not enabled.",
+                "The Customer Data Directory is not enabled for the server."),
         ERROR_CODE_CDS_CONFIG_RETRIEVE("65001",
-                "Unable to retrieve CDS configuration.",
-                "Server encountered an error while retrieving the CDS configuration of %s."),
+                "Unable to retrieve CDD configuration.",
+                "Server encountered an error while retrieving the CDD configuration of %s."),
         ERROR_CODE_CDS_CONFIG_UPDATE("65002",
-                "Unable to update CDS configuration.",
-                "Server encountered an error while updating the CDS configuration of %s."),
+                "Unable to update CDD configuration.",
+                "Server encountered an error while updating the CDD configuration of %s."),
         ERROR_CODE_CDS_CONFIG_SYNC("65003",
-                "Unable to update CDS configuration.",
-                "Server encountered an error while sending the CDS configuration of %s to the Customer Data " +
-                        "Service. %s"),
+                "Unable to update CDD configuration.",
+                "Server encountered an error while sending the CDD configuration of %s to the Customer Data " +
+                        "Directory. %s"),
         ERROR_CODE_CDS_SERVICE_CREDENTIALS("65004",
-                "Unable to set up the CDS service credentials.",
-                "Server encountered an error while setting up the application the Customer Data Service calls " +
+                "Unable to set up the CDD service credentials.",
+                "Server encountered an error while setting up the application the Customer Data Directory calls " +
                         "the Identity Server with for %s. %s");
 
         private final String code;

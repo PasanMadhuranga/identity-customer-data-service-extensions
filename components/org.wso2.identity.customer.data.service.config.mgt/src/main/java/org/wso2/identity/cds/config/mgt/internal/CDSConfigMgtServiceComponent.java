@@ -50,7 +50,7 @@ public class CDSConfigMgtServiceComponent {
         context.getBundleContext().registerService(AuthorizedAPIManagementListener.class.getName(),
                 new CDSAuthorizedAPIListener(), null);
         if (LOG.isDebugEnabled()) {
-            LOG.debug("CDS config management component is activated.");
+            LOG.debug("CDD config management component is activated.");
         }
     }
 
@@ -58,7 +58,7 @@ public class CDSConfigMgtServiceComponent {
     protected void deactivate(ComponentContext context) {
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("CDS config management component is deactivated.");
+            LOG.debug("CDD config management component is deactivated.");
         }
     }
 

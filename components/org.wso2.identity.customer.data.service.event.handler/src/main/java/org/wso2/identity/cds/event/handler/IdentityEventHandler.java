@@ -97,7 +97,7 @@ public class IdentityEventHandler extends AbstractEventHandler {
                     CDSClient.triggerIdentityDataSync(eventName, profileSyncPayload, tenant);
                 }
             } catch (Exception e) {
-                LOG.debug("Error handling event for CDS sync.", e);
+                LOG.debug("Error handling event for CDD sync.", e);
             }
         }
 
@@ -127,7 +127,7 @@ public class IdentityEventHandler extends AbstractEventHandler {
                 }
 
             } catch (Exception e) {
-                LOG.debug("Error handling event for CDS sync.", e);
+                LOG.debug("Error handling event for CDD sync.", e);
             }
         }
 
@@ -140,7 +140,7 @@ public class IdentityEventHandler extends AbstractEventHandler {
             String tenant = (String) properties.get(TENANT_DOMAIN);
             CDSClient.triggerIdentityDataSync(eventName, profileSyncPayload, tenant);
             } catch (Exception e) {
-                LOG.debug("Error handling event for CDS sync.", e);
+                LOG.debug("Error handling event for CDD sync.", e);
             }
         }
     }
@@ -177,7 +177,7 @@ public class IdentityEventHandler extends AbstractEventHandler {
         try {
             return cdsConfigService.isCDSEnabled(tenantDomain);
         } catch (CDSConfigMgtException e) {
-            LOG.warn(e.getMessage() + ". CDS is not enabled for the tenant.", e);
+            LOG.warn(e.getMessage() + ". CDD is not enabled for the tenant.", e);
             return false;
         }
     }

@@ -101,7 +101,7 @@ public class ClaimEventHandler extends AbstractEventHandler {
         try {
             return cdsConfigService.isCDSEnabled(tenantDomain);
         } catch (CDSConfigMgtException e) {
-            LOG.warn(e.getMessage() + ". CDS is not enabled for the tenant.", e);
+            LOG.warn(e.getMessage() + ". CDD is not enabled for the tenant.", e);
             return false;
         }
     }
