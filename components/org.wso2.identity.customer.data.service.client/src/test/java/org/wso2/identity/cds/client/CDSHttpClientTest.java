@@ -50,4 +50,14 @@ public class CDSHttpClientTest {
         assertTrue(config.getSocketTimeout() > 0);
         assertTrue(config.getConnectionRequestTimeout() > 0);
     }
+
+    @Test
+    public void testTheAdminCallsWaitLongerForCDSOnly() {
+
+        RequestConfig config = CDSHttpClient.adminRequestConfig();
+        assertEquals(config.getSocketTimeout(), CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS);
+        assertTrue(config.getSocketTimeout() > CDSHttpClient.SOCKET_TIMEOUT_MILLIS);
+        assertEquals(config.getConnectTimeout(), CDSHttpClient.CONNECT_TIMEOUT_MILLIS);
+        assertEquals(config.getConnectionRequestTimeout(), CDSHttpClient.CONNECTION_REQUEST_TIMEOUT_MILLIS);
+    }
 }

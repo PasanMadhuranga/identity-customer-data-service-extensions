@@ -33,10 +33,17 @@ final class CDSHttpClient {
     static final int CONNECT_TIMEOUT_MILLIS = 2000;
     // Time to wait for data from CDS, between two packets of the response.
     static final int SOCKET_TIMEOUT_MILLIS = 3000;
+    // The same for the calls an admin makes and waits for, as CDS calls the Identity Server back before it
+    // responds to them.
+    static final int ADMIN_SOCKET_TIMEOUT_MILLIS = 10000;
     // Time to wait for a free connection of the pool, when all of them are in use.
     static final int CONNECTION_REQUEST_TIMEOUT_MILLIS = 1000;
     // All the calls go to the one CDS, so the limit of the pool and of the route is the same.
     static final int MAX_CONNECTIONS = 20;
+
+    private static final RequestConfig ADMIN_REQUEST_CONFIG = RequestConfig.copy(requestConfig())
+            .setSocketTimeout(ADMIN_SOCKET_TIMEOUT_MILLIS)
+            .build();
 
     private static volatile CloseableHttpClient client;
 
@@ -71,5 +78,16 @@ final class CDSHttpClient {
                 .setSocketTimeout(SOCKET_TIMEOUT_MILLIS)
                 .setConnectionRequestTimeout(CONNECTION_REQUEST_TIMEOUT_MILLIS)
                 .build();
+    }
+
+    /**
+     * Get the request config of the calls an admin makes and waits for, such as enabling CDS. It differs from the
+     * default of the client only in the socket timeout.
+     *
+     * @return The request config of the admin calls.
+     */
+    static RequestConfig adminRequestConfig() {
+
+        return ADMIN_REQUEST_CONFIG;
     }
 }

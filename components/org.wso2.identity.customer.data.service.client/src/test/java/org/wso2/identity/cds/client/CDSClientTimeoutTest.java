@@ -54,12 +54,13 @@ public class CDSClientTimeoutTest {
 
     private static final Log LOG = LogFactory.getLog(CDSClientTimeoutTest.class);
     private static final String TENANT = "acme";
-    // Longer than the read timeout of the client, so a call that has no timeout is seen as stuck.
+    // Longer than the socket timeouts of the client, so a call that has no timeout is seen as stuck.
     private static final long CALL_LIMIT_SECONDS = 15;
 
     private ServerSocket stalledCds;
     private final List<Socket> heldConnections = new CopyOnWriteArrayList<>();
     private ExecutorService caller;
+    private long lastCallMillis;
 
     @BeforeMethod
     public void setUp() throws IOException {
@@ -100,6 +101,7 @@ public class CDSClientTimeoutTest {
             return null;
         });
         assertTrue(failure instanceof CDSServerException, "Expected a CDSServerException, got " + failure);
+        assertWaitedForTheAdminTimeout();
     }
 
     @Test
@@ -108,6 +110,7 @@ public class CDSClientTimeoutTest {
         Throwable failure = callWithinLimit(() -> CDSClient.syncServiceCredentials(TENANT, "acme-org-id",
                 "acme-client", "acme-secret"));
         assertTrue(failure instanceof CDSServerException, "Expected a CDSServerException, got " + failure);
+        assertWaitedForTheAdminTimeout();
     }
 
     // The sync events log the failure and return, so the sign-in or user operation that sent them goes on.
@@ -119,6 +122,15 @@ public class CDSClientTimeoutTest {
             return null;
         });
         assertTrue(failure == null, "Expected the profile sync to return, got " + failure);
+        assertTrue(lastCallMillis < CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS,
+                "The profile sync waited " + lastCallMillis + " ms, as long as an admin call.");
+    }
+
+    // A socket timeout ends a call only after it, so a shorter call did not use the admin timeout.
+    private void assertWaitedForTheAdminTimeout() {
+
+        assertTrue(lastCallMillis >= CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS,
+                "The admin call ended after " + lastCallMillis + " ms, before the admin socket timeout.");
     }
 
     /**
@@ -148,8 +160,8 @@ public class CDSClientTimeoutTest {
             fail("The call to CDS was still waiting after " + CALL_LIMIT_SECONDS + " seconds.");
             return null;
         } finally {
-            LOG.info("[CDSClientTimeoutTest] call ended after "
-                    + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) + " ms");
+            lastCallMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            LOG.info("[CDSClientTimeoutTest] call ended after " + lastCallMillis + " ms");
         }
     }
 }

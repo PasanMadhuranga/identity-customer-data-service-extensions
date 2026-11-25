@@ -162,6 +162,7 @@ public class CDSClient {
         try {
             CloseableHttpClient client = CDSHttpClient.get();
             HttpPatch httpPatch = new HttpPatch(String.format(CONFIG_API, serviceURL, tenant));
+            httpPatch.setConfig(CDSHttpClient.adminRequestConfig());
             httpPatch.setEntity(new StringEntity(
                     MAPPER.writeValueAsString(Collections.singletonMap(CDS_ENABLED, cdsEnabled)),
                     StandardCharsets.UTF_8));
@@ -289,6 +290,7 @@ public class CDSClient {
         try {
             CloseableHttpClient client = CDSHttpClient.get();
             HttpPost httpPost = new HttpPost(String.format(SERVICE_CREDENTIALS_SYNC_API, serviceURL, tenant));
+            httpPost.setConfig(CDSHttpClient.adminRequestConfig());
             httpPost.setEntity(new StringEntity(MAPPER.writeValueAsString(event), StandardCharsets.UTF_8));
             httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
             httpPost.setHeader(AUTHORIZATION, "Basic " + credentials);
