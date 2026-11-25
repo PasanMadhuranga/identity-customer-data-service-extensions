@@ -29,7 +29,6 @@ import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.identity.organization.management.service.exception.OrganizationManagementException;
 import org.wso2.identity.cds.client.exception.CDSClientException;
 import org.wso2.identity.cds.client.exception.CDSException;
@@ -160,7 +159,8 @@ public class CDSClient {
         }
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
+        try {
+            CloseableHttpClient client = CDSHttpClient.get();
             HttpPatch httpPatch = new HttpPatch(String.format(CONFIG_API, serviceURL, tenant));
             httpPatch.setEntity(new StringEntity(
                     MAPPER.writeValueAsString(Collections.singletonMap(CDS_ENABLED, cdsEnabled)),
@@ -201,47 +201,46 @@ public class CDSClient {
     private static void doPost(String url, String jsonBody, String tenant, String operation) throws IOException {
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
-            HttpPost httpPost = new HttpPost(url);
-            httpPost.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
-            httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
-            httpPost.setHeader(AUTHORIZATION, "Basic " + Utils.getBase64EncodedCredentials());
+        CloseableHttpClient client = CDSHttpClient.get();
+        HttpPost httpPost = new HttpPost(url);
+        httpPost.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
+        httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
+        httpPost.setHeader(AUTHORIZATION, "Basic " + Utils.getBase64EncodedCredentials());
 
-            try (CloseableHttpResponse response = client.execute(httpPost)) {
-                int statusCode = response.getStatusLine().getStatusCode();
-                String responseBody = "";
+        try (CloseableHttpResponse response = client.execute(httpPost)) {
+            int statusCode = response.getStatusLine().getStatusCode();
+            String responseBody = "";
 
-                if (response.getEntity() != null && response.getEntity().getContent() != null) {
-                    responseBody = new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
-                }
-
-                if (statusCode == 200 || statusCode == 204) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("CDD " + Utils.sanitizeForLog(operation) + " succeeded for tenant: " +
-                                sanitizedTenant);
-                    }
-                    return;
-                }
-
-                CdsError cdsError = parseCdsError(responseBody);
-
-                if (isCdsNotEnabled(statusCode, cdsError.code)) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("CDD " + Utils.sanitizeForLog(operation) + " skipped as CDD is not enabled for " +
-                                "tenant: " + sanitizedTenant);
-                    }
-                    return;
-                }
-
-                log.warn(String.format("CDD %s failed for tenant=%s with status=%d, code=%s, message=%s, " +
-                                "description=%s",
-                        Utils.sanitizeForLog(operation),
-                        sanitizedTenant,
-                        statusCode,
-                        Utils.sanitizeForLog(cdsError.code),
-                        Utils.sanitizeForLog(cdsError.message),
-                        Utils.sanitizeForLog(cdsError.description)));
+            if (response.getEntity() != null && response.getEntity().getContent() != null) {
+                responseBody = new String(response.getEntity().getContent().readAllBytes(), StandardCharsets.UTF_8);
             }
+
+            if (statusCode == 200 || statusCode == 204) {
+                if (log.isDebugEnabled()) {
+                    log.debug("CDD " + Utils.sanitizeForLog(operation) + " succeeded for tenant: " +
+                            sanitizedTenant);
+                }
+                return;
+            }
+
+            CdsError cdsError = parseCdsError(responseBody);
+
+            if (isCdsNotEnabled(statusCode, cdsError.code)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("CDD " + Utils.sanitizeForLog(operation) + " skipped as CDD is not enabled for " +
+                            "tenant: " + sanitizedTenant);
+                }
+                return;
+            }
+
+            log.warn(String.format("CDD %s failed for tenant=%s with status=%d, code=%s, message=%s, " +
+                            "description=%s",
+                    Utils.sanitizeForLog(operation),
+                    sanitizedTenant,
+                    statusCode,
+                    Utils.sanitizeForLog(cdsError.code),
+                    Utils.sanitizeForLog(cdsError.message),
+                    Utils.sanitizeForLog(cdsError.description)));
         }
     }
 
@@ -287,7 +286,8 @@ public class CDSClient {
         event.put(CLIENT_SECRET, clientSecret);
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
+        try {
+            CloseableHttpClient client = CDSHttpClient.get();
             HttpPost httpPost = new HttpPost(String.format(SERVICE_CREDENTIALS_SYNC_API, serviceURL, tenant));
             httpPost.setEntity(new StringEntity(MAPPER.writeValueAsString(event), StandardCharsets.UTF_8));
             httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
