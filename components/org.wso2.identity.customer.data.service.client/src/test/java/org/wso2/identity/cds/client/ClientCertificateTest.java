@@ -31,57 +31,78 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.core.util.KeyStoreManager;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
+import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.TrustManagerFactory;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.expectThrows;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertTrue;
 
 /**
- * Unit tests for {@link ClientCertificate}, against a stub CDD that requires a client certificate.
+ * Unit tests for {@link ClientCertificate}, against a stub CDD that asks for a client certificate and answers 401
+ * without one, as CDD does on its sync endpoints with tls.require_client_cert on.
  */
 public class ClientCertificateTest {
 
     private static final String KEYSTORE = "client-certificate-test.p12";
+    private static final String SERVER_ONLY_KEYSTORE = "client-certificate-server-only.p12";
+    private static final String CONFIGURED_KEYSTORE = "client-certificate-configured.p12";
     private static final char[] PASSWORD = "testpass".toCharArray();
+    private static final String CONFIGURED_PASSWORD = "configpass";
     private static final String[] TRUST_STORE_PROPERTIES = {"javax.net.ssl.trustStore",
             "javax.net.ssl.trustStorePassword", "javax.net.ssl.trustStoreType"};
 
     private KeyStore keyStore;
     private X509Certificate certificate;
+    private KeyStore serverOnlyKeyStore;
+    private X509Certificate serverOnlyCertificate;
+    private X509Certificate configuredCertificate;
     private HttpsServer cdd;
     private Properties savedProperties;
+    private final Map<String, String> properties = new HashMap<>();
+    private MockedStatic<IdentityUtil> identityUtil;
 
     @BeforeMethod
     public void setUp() throws Exception {
 
-        keyStore = KeyStore.getInstance("PKCS12");
-        try (InputStream in = getClass().getClassLoader().getResourceAsStream(KEYSTORE)) {
-            keyStore.load(in, PASSWORD);
-        }
+        keyStore = load(KEYSTORE, PASSWORD);
         certificate = (X509Certificate) keyStore.getCertificate("test");
+        serverOnlyKeyStore = load(SERVER_ONLY_KEYSTORE, PASSWORD);
+        serverOnlyCertificate = (X509Certificate) serverOnlyKeyStore.getCertificate("test");
+        configuredCertificate = (X509Certificate) load(CONFIGURED_KEYSTORE, CONFIGURED_PASSWORD.toCharArray())
+                .getCertificate("cdd-client");
 
-        // CDD serves the test certificate, and trusts only it as a client certificate.
+        // CDD serves the test certificate, and trusts it and the configured certificate as client certificates.
+        KeyStore clientTrustStore = KeyStore.getInstance("PKCS12");
+        clientTrustStore.load(null, null);
+        clientTrustStore.setCertificateEntry("test", certificate);
+        clientTrustStore.setCertificateEntry("configured", configuredCertificate);
         KeyManagerFactory keyManagers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         keyManagers.init(keyStore, PASSWORD);
         TrustManagerFactory trustManagers = TrustManagerFactory.getInstance(
                 TrustManagerFactory.getDefaultAlgorithm());
-        trustManagers.init(keyStore);
+        trustManagers.init(clientTrustStore);
         SSLContext serverContext = SSLContext.getInstance("TLS");
         serverContext.init(keyManagers.getKeyManagers(), trustManagers.getTrustManagers(), null);
 
@@ -91,14 +112,20 @@ public class ClientCertificateTest {
             public void configure(HttpsParameters params) {
 
                 SSLParameters parameters = serverContext.getDefaultSSLParameters();
-                parameters.setNeedClientAuth(true);
+                parameters.setWantClientAuth(true);
                 params.setSSLParameters(parameters);
             }
         });
         cdd.createContext("/", exchange -> {
-            X509Certificate peer = (X509Certificate) ((HttpsExchange) exchange).getSSLSession()
-                    .getPeerCertificates()[0];
-            exchange.sendResponseHeaders(peer.equals(certificate) ? 204 : 403, -1);
+            int status;
+            try {
+                X509Certificate peer = (X509Certificate) ((HttpsExchange) exchange).getSSLSession()
+                        .getPeerCertificates()[0];
+                status = peer.equals(certificate) ? 204 : peer.equals(configuredCertificate) ? 200 : 403;
+            } catch (SSLPeerUnverifiedException e) {
+                status = 401;
+            }
+            exchange.sendResponseHeaders(status, -1);
             exchange.close();
         });
         cdd.start();
@@ -110,36 +137,32 @@ public class ClientCertificateTest {
                 savedProperties.setProperty(property, System.getProperty(property));
             }
         }
-        System.setProperty("javax.net.ssl.trustStore", getClass().getClassLoader().getResource(KEYSTORE).getPath());
+        System.setProperty("javax.net.ssl.trustStore", resource(KEYSTORE));
         System.setProperty("javax.net.ssl.trustStorePassword", new String(PASSWORD));
         System.setProperty("javax.net.ssl.trustStoreType", "PKCS12");
+
+        properties.clear();
+        identityUtil = mockStatic(IdentityUtil.class);
+        identityUtil.when(() -> IdentityUtil.getProperty(anyString())).thenAnswer(
+                invocation -> properties.get(invocation.<String>getArgument(0)));
     }
 
     @AfterMethod
     public void tearDown() throws Exception {
 
+        identityUtil.close();
         cdd.stop(0);
         for (String property : TRUST_STORE_PROPERTIES) {
             System.clearProperty(property);
         }
         savedProperties.forEach((key, value) -> System.setProperty((String) key, (String) value));
-        Field sslContext = ClientCertificate.class.getDeclaredField("sslContext");
-        sslContext.setAccessible(true);
-        sslContext.set(null, null);
+        sslContextField().set(null, null);
     }
 
     @Test
     public void presentsTheKeyPairOfThePrimaryKeystore() throws Exception {
 
-        KeyStoreManager keyStoreManager = mock(KeyStoreManager.class);
-        when(keyStoreManager.getDefaultPrivateKey()).thenReturn((PrivateKey) keyStore.getKey("test", PASSWORD));
-        when(keyStoreManager.getDefaultPrimaryCertificate()).thenReturn(certificate);
-        when(keyStoreManager.getPrimaryKeyStore()).thenReturn(keyStore);
-
-        try (MockedStatic<KeyStoreManager> keyStoreManagers = mockStatic(KeyStoreManager.class)) {
-            keyStoreManagers.when(() -> KeyStoreManager.getInstance(MultitenantConstants.SUPER_TENANT_ID))
-                    .thenReturn(keyStoreManager);
-
+        try (MockedStatic<KeyStoreManager> keyStoreManagers = primaryKeystore(keyStore)) {
             assertEquals(get(), 204);
         }
     }
@@ -151,9 +174,89 @@ public class ClientCertificateTest {
             keyStoreManagers.when(() -> KeyStoreManager.getInstance(MultitenantConstants.SUPER_TENANT_ID))
                     .thenThrow(new IllegalStateException("the keystore is not ready"));
 
-            // CDD requires a certificate here, so the handshake fails; one that does not would take the call.
-            expectThrows(IOException.class, this::get);
+            assertEquals(get(), 401);
+            assertEquals(sslContextField().get(null), null, "the keystore is read again on the next call");
         }
+    }
+
+    // A server certificate a public CA issued is for TLS server authentication only, and CDD would end the handshake
+    // on it: it is held back, so CDD answers with the reason, and the decision is kept rather than logged per call.
+    @Test
+    public void holdsBackAPrimaryCertificateForServersOnly() throws Exception {
+
+        try (MockedStatic<KeyStoreManager> keyStoreManagers = primaryKeystore(serverOnlyKeyStore)) {
+            assertEquals(get(), 401);
+            assertNotNull(sslContextField().get(null));
+        }
+    }
+
+    @Test
+    public void presentsTheConfiguredKeyPairOverThePrimaryOne() throws Exception {
+
+        configure("cdd-client");
+        try (MockedStatic<KeyStoreManager> keyStoreManagers = primaryKeystore(keyStore)) {
+            assertEquals(get(), 200);
+        }
+    }
+
+    @Test
+    public void presentsNoCertificateWhenTheConfiguredKeyPairIsNotThere() throws Exception {
+
+        configure("another-alias");
+        try (MockedStatic<KeyStoreManager> keyStoreManagers = primaryKeystore(keyStore)) {
+            assertEquals(get(), 401, "a key pair that is set but missing never falls back to the primary one");
+        }
+    }
+
+    @Test
+    public void allowsClientAuth() throws Exception {
+
+        assertTrue(ClientCertificate.allowsClientAuth(certificate), "no extended key usage");
+        assertTrue(ClientCertificate.allowsClientAuth(configuredCertificate), "clientAuth");
+        assertFalse(ClientCertificate.allowsClientAuth(serverOnlyCertificate), "serverAuth only");
+    }
+
+    private void configure(String alias) throws Exception {
+
+        properties.put("CustomerDataService.ClientCertificate.Location", resource(CONFIGURED_KEYSTORE));
+        properties.put("CustomerDataService.ClientCertificate.Type", "PKCS12");
+        properties.put("CustomerDataService.ClientCertificate.Password", CONFIGURED_PASSWORD);
+        properties.put("CustomerDataService.ClientCertificate.KeyAlias", alias);
+    }
+
+    private static MockedStatic<KeyStoreManager> primaryKeystore(KeyStore primary) throws Exception {
+
+        KeyStoreManager keyStoreManager = mock(KeyStoreManager.class);
+        when(keyStoreManager.getDefaultPrivateKey()).thenReturn((PrivateKey) primary.getKey("test", PASSWORD));
+        when(keyStoreManager.getDefaultPrimaryCertificate()).thenReturn(
+                (X509Certificate) primary.getCertificate("test"));
+        when(keyStoreManager.getPrimaryKeyStore()).thenReturn(primary);
+
+        MockedStatic<KeyStoreManager> keyStoreManagers = mockStatic(KeyStoreManager.class);
+        keyStoreManagers.when(() -> KeyStoreManager.getInstance(MultitenantConstants.SUPER_TENANT_ID))
+                .thenReturn(keyStoreManager);
+        return keyStoreManagers;
+    }
+
+    private static KeyStore load(String name, char[] password) throws Exception {
+
+        KeyStore store = KeyStore.getInstance("PKCS12");
+        try (InputStream in = ClientCertificateTest.class.getClassLoader().getResourceAsStream(name)) {
+            store.load(in, password);
+        }
+        return store;
+    }
+
+    private static String resource(String name) throws Exception {
+
+        return Paths.get(ClientCertificateTest.class.getClassLoader().getResource(name).toURI()).toString();
+    }
+
+    private static Field sslContextField() throws Exception {
+
+        Field sslContext = ClientCertificate.class.getDeclaredField("sslContext");
+        sslContext.setAccessible(true);
+        return sslContext;
     }
 
     private int get() throws Exception {
