@@ -79,7 +79,7 @@ public class CDSHttpClientTest {
         assertEquals(config.getSocketTimeout(), CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
         assertEquals(config.getConnectionRequestTimeout(), CDSHttpClient.DEFAULT_CONNECTION_REQUEST_TIMEOUT_MILLIS);
         assertEquals(CDSHttpClient.adminRequestConfig().getSocketTimeout(),
-                CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS);
+                CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS);
         assertEquals(CDSHttpClient.maxConnections(), CDSHttpClient.DEFAULT_MAX_CONNECTIONS);
     }
 
@@ -88,6 +88,7 @@ public class CDSHttpClientTest {
 
         properties.put(CDSHttpClient.CONNECT_TIMEOUT_PROPERTY, "1500");
         properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, "4000");
+        properties.put(CDSHttpClient.ADMIN_SOCKET_TIMEOUT_PROPERTY, "15000");
         properties.put(CDSHttpClient.CONNECTION_REQUEST_TIMEOUT_PROPERTY, "500");
         properties.put(CDSHttpClient.MAX_CONNECTIONS_PROPERTY, "50");
 
@@ -95,6 +96,7 @@ public class CDSHttpClientTest {
         assertEquals(config.getConnectTimeout(), 1500);
         assertEquals(config.getSocketTimeout(), 4000);
         assertEquals(config.getConnectionRequestTimeout(), 500);
+        assertEquals(CDSHttpClient.adminRequestConfig().getSocketTimeout(), 15000);
         assertEquals(CDSHttpClient.maxConnections(), 50);
     }
 
@@ -103,9 +105,10 @@ public class CDSHttpClientTest {
 
         properties.put(CDSHttpClient.CONNECT_TIMEOUT_PROPERTY, "1500");
         properties.put(CDSHttpClient.CONNECTION_REQUEST_TIMEOUT_PROPERTY, "500");
+        properties.put(CDSHttpClient.ADMIN_SOCKET_TIMEOUT_PROPERTY, "12000");
 
         RequestConfig admin = CDSHttpClient.adminRequestConfig();
-        assertEquals(admin.getSocketTimeout(), CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS);
+        assertEquals(admin.getSocketTimeout(), 12000);
         assertEquals(admin.getConnectTimeout(), 1500);
         assertEquals(admin.getConnectionRequestTimeout(), 500);
         assertEquals(CDSHttpClient.requestConfig().getSocketTimeout(), CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
@@ -131,6 +134,7 @@ public class CDSHttpClientTest {
 
         properties.put(CDSHttpClient.CONNECT_TIMEOUT_PROPERTY, value);
         properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, value);
+        properties.put(CDSHttpClient.ADMIN_SOCKET_TIMEOUT_PROPERTY, value);
         properties.put(CDSHttpClient.CONNECTION_REQUEST_TIMEOUT_PROPERTY, value);
         properties.put(CDSHttpClient.MAX_CONNECTIONS_PROPERTY, value);
 
@@ -139,7 +143,7 @@ public class CDSHttpClientTest {
         assertEquals(config.getSocketTimeout(), CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
         assertEquals(config.getConnectionRequestTimeout(), CDSHttpClient.DEFAULT_CONNECTION_REQUEST_TIMEOUT_MILLIS);
         assertEquals(CDSHttpClient.adminRequestConfig().getSocketTimeout(),
-                CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS);
+                CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS);
         assertEquals(CDSHttpClient.maxConnections(), CDSHttpClient.DEFAULT_MAX_CONNECTIONS);
     }
 

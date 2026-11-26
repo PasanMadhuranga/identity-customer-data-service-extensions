@@ -33,9 +33,8 @@ import java.io.IOException;
  * the calling thread, such as the thread of a sign-in, for as long as it does not respond. The client is shared, so
  * its connection pool also limits how many connections the Identity Server opens to CDS.
  * <p>
- * The timeouts, except the one of the admin calls, and the size of the pool are read from
- * [customer_data_service.http_client] of deployment.toml, when the client is first used. A value that is not set,
- * or is not a positive whole number, takes the default.
+ * The timeouts and the size of the pool are read from [customer_data_service.http_client] of deployment.toml, when
+ * the client is first used. A value that is not set, or is not a positive whole number, takes the default.
  */
 final class CDSHttpClient {
 
@@ -49,7 +48,8 @@ final class CDSHttpClient {
     static final int DEFAULT_SOCKET_TIMEOUT_MILLIS = 3000;
     // The same for the calls an admin makes and waits for, as CDS calls the Identity Server back before it
     // responds to them.
-    static final int ADMIN_SOCKET_TIMEOUT_MILLIS = 10000;
+    static final String ADMIN_SOCKET_TIMEOUT_PROPERTY = "CustomerDataService.HTTPClient.AdminReadTimeout";
+    static final int DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS = 10000;
     // Time to wait for a free connection of the pool, when all of them are in use.
     static final String CONNECTION_REQUEST_TIMEOUT_PROPERTY =
             "CustomerDataService.HTTPClient.ConnectionRequestTimeout";
@@ -177,6 +177,8 @@ final class CDSHttpClient {
 
             int connectTimeout = readPositiveInt(CONNECT_TIMEOUT_PROPERTY, DEFAULT_CONNECT_TIMEOUT_MILLIS);
             int socketTimeout = readPositiveInt(SOCKET_TIMEOUT_PROPERTY, DEFAULT_SOCKET_TIMEOUT_MILLIS);
+            int adminSocketTimeout = readPositiveInt(ADMIN_SOCKET_TIMEOUT_PROPERTY,
+                    DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS);
             int connectionRequestTimeout = readPositiveInt(CONNECTION_REQUEST_TIMEOUT_PROPERTY,
                     DEFAULT_CONNECTION_REQUEST_TIMEOUT_MILLIS);
             maxConnections = readPositiveInt(MAX_CONNECTIONS_PROPERTY, DEFAULT_MAX_CONNECTIONS);
@@ -187,7 +189,7 @@ final class CDSHttpClient {
                     .setConnectionRequestTimeout(connectionRequestTimeout)
                     .build();
             adminRequestConfig = RequestConfig.copy(requestConfig)
-                    .setSocketTimeout(ADMIN_SOCKET_TIMEOUT_MILLIS)
+                    .setSocketTimeout(adminSocketTimeout)
                     .build();
             client = HttpClients.custom()
                     .setDefaultRequestConfig(requestConfig)
@@ -198,8 +200,8 @@ final class CDSHttpClient {
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Created the HTTP client of the calls to CDS. Connection timeout: %d ms, "
                                 + "read timeout: %d ms, admin read timeout: %d ms, connection request timeout: %d ms, "
-                                + "connection pool size: %d.", connectTimeout, socketTimeout,
-                        ADMIN_SOCKET_TIMEOUT_MILLIS, connectionRequestTimeout, maxConnections));
+                                + "connection pool size: %d.", connectTimeout, socketTimeout, adminSocketTimeout,
+                        connectionRequestTimeout, maxConnections));
             }
         }
     }

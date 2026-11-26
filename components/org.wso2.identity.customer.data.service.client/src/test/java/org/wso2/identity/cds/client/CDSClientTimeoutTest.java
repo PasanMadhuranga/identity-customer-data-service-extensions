@@ -110,7 +110,7 @@ public class CDSClientTimeoutTest {
             return null;
         });
         assertTrue(call.failure instanceof CDSServerException, "Expected a CDSServerException, got " + call.failure);
-        assertEndedAfter(call, CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
+        assertEndedAfter(call, CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
     }
 
     @Test
@@ -119,7 +119,7 @@ public class CDSClientTimeoutTest {
         Call call = call(() -> CDSClient.syncServiceCredentials(TENANT, "acme-org-id", "acme-client",
                 "acme-secret"));
         assertTrue(call.failure instanceof CDSServerException, "Expected a CDSServerException, got " + call.failure);
-        assertEndedAfter(call, CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
+        assertEndedAfter(call, CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
     }
 
     // The sync events log the failure and return, so the sign-in or user operation that sent them goes on.
@@ -129,7 +129,27 @@ public class CDSClientTimeoutTest {
         Call call = call(this::profileSync);
         assertTrue(call.failure == null, "Expected the profile sync to return, got " + call.failure);
         assertEndedAfter(call, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS,
-                CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS);
+                CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS);
+    }
+
+    @Test
+    public void testTheConfiguredAdminReadTimeoutIsUsed() throws Exception {
+
+        properties.put(CDSHttpClient.ADMIN_SOCKET_TIMEOUT_PROPERTY, "2500");
+
+        Call config = call(() -> {
+            CDSClient.updateCDSConfig(TENANT, true);
+            return null;
+        });
+        assertTrue(config.failure instanceof CDSServerException, "Expected a CDSServerException, got "
+                + config.failure);
+        assertEndedAfter(config, 2500, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
+
+        Call credentials = call(() -> CDSClient.syncServiceCredentials(TENANT, "acme-org-id", "acme-client",
+                "acme-secret"));
+        assertTrue(credentials.failure instanceof CDSServerException, "Expected a CDSServerException, got "
+                + credentials.failure);
+        assertEndedAfter(credentials, 2500, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
     }
 
     @Test
