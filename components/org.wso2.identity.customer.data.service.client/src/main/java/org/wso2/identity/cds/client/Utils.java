@@ -33,8 +33,41 @@ import java.util.Properties;
  */
 public class Utils {
 
+    private static final String SERVER_URL = "CustomerDataService.ServerURL";
+    private static final String SYNC_URL = "CustomerDataService.SyncURL";
+
+    /**
+     * The URL the Identity Server calls CDD on: [customer_data_service] sync_url, the sync port of CDD, or
+     * server_url when sync_url is not set, for a CDD that serves the sync endpoints on its public port.
+     *
+     * @return The URL of CDD for the calls of the Identity Server.
+     */
     public static String getCDSServiceURL() {
-        return IdentityUtil.getProperty("CustomerDataService.ServerURL");
+
+        String syncURL = StringUtils.trimToNull(IdentityUtil.getProperty(SYNC_URL));
+        return syncURL != null ? syncURL : IdentityUtil.getProperty(SERVER_URL);
+    }
+
+    /**
+     * Where the Identity Server sends its syncs, and how CDD has to serve them for that.
+     *
+     * @return The message, or null when CDD is not enabled or no URL is set.
+     */
+    public static String describeSyncTarget() {
+
+        if (!isCDSEnabled()) {
+            return null;
+        }
+        String syncURL = StringUtils.trimToNull(IdentityUtil.getProperty(SYNC_URL));
+        if (syncURL != null) {
+            return "CDD syncs go to sync_url " + sanitizeForLog(syncURL) + ": CDD has to serve them on sync.addr.";
+        }
+        String serverURL = StringUtils.trimToNull(IdentityUtil.getProperty(SERVER_URL));
+        if (serverURL == null) {
+            return null;
+        }
+        return "CDD syncs go to server_url " + sanitizeForLog(serverURL) +
+                ", as sync_url is not set: CDD has to serve them on addr.";
     }
 
   // Get Base64 encoded credentials for CDS admin user
