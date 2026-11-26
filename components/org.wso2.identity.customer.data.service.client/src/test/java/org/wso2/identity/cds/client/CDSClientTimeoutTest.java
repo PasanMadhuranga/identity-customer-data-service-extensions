@@ -25,6 +25,7 @@ import org.mockito.Mockito;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.identity.cds.client.exception.CDSServerException;
 
 import java.io.IOException;
@@ -33,22 +34,25 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mockStatic;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
 /**
  * Tests that the calls to CDS end when CDS accepts the connection but never responds, so a slow CDS cannot hold
- * the threads of the Identity Server.
+ * the threads of the Identity Server, and that the timeouts and the pool size of
+ * [customer_data_service.http_client] are the ones the calls use.
  */
 public class CDSClientTimeoutTest {
 
@@ -59,12 +63,14 @@ public class CDSClientTimeoutTest {
 
     private ServerSocket stalledCds;
     private final List<Socket> heldConnections = new CopyOnWriteArrayList<>();
+    // The identity.xml properties the mocked IdentityUtil returns.
+    private final Map<String, String> properties = new ConcurrentHashMap<>();
     private ExecutorService caller;
-    private long lastCallMillis;
 
     @BeforeMethod
     public void setUp() throws IOException {
 
+        heldConnections.clear();
         // Accepts every connection and reads nothing, as a CDS that hangs does.
         stalledCds = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
         Thread acceptor = new Thread(() -> {
@@ -79,7 +85,9 @@ public class CDSClientTimeoutTest {
         acceptor.setDaemon(true);
         acceptor.start();
 
-        caller = Executors.newSingleThreadExecutor();
+        properties.clear();
+        caller = Executors.newFixedThreadPool(2);
+        CDSHttpClient.reset();
     }
 
     @AfterMethod
@@ -91,77 +99,140 @@ public class CDSClientTimeoutTest {
             connection.close();
         }
         caller.shutdownNow();
+        CDSHttpClient.reset();
     }
 
     @Test
-    public void testConfigUpdateEndsWhenCDSDoesNotRespond() throws Exception {
+    public void testConfigUpdateEndsAfterTheDefaultAdminTimeout() throws Exception {
 
-        Throwable failure = callWithinLimit(() -> {
+        Call call = call(() -> {
             CDSClient.updateCDSConfig(TENANT, true);
             return null;
         });
-        assertTrue(failure instanceof CDSServerException, "Expected a CDSServerException, got " + failure);
-        assertWaitedForTheAdminTimeout();
+        assertTrue(call.failure instanceof CDSServerException, "Expected a CDSServerException, got " + call.failure);
+        assertEndedAfter(call, CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
     }
 
     @Test
-    public void testServiceCredentialsSyncEndsWhenCDSDoesNotRespond() throws Exception {
+    public void testServiceCredentialsSyncEndsAfterTheDefaultAdminTimeout() throws Exception {
 
-        Throwable failure = callWithinLimit(() -> CDSClient.syncServiceCredentials(TENANT, "acme-org-id",
-                "acme-client", "acme-secret"));
-        assertTrue(failure instanceof CDSServerException, "Expected a CDSServerException, got " + failure);
-        assertWaitedForTheAdminTimeout();
+        Call call = call(() -> CDSClient.syncServiceCredentials(TENANT, "acme-org-id", "acme-client",
+                "acme-secret"));
+        assertTrue(call.failure instanceof CDSServerException, "Expected a CDSServerException, got " + call.failure);
+        assertEndedAfter(call, CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
     }
 
     // The sync events log the failure and return, so the sign-in or user operation that sent them goes on.
     @Test
-    public void testProfileSyncEndsWhenCDSDoesNotRespond() throws Exception {
+    public void testProfileSyncEndsAfterTheDefaultReadTimeout() throws Exception {
 
-        Throwable failure = callWithinLimit(() -> {
-            CDSClient.triggerProfileSync("POST_ADD_USER", new HashMap<>(), TENANT);
-            return null;
-        });
-        assertTrue(failure == null, "Expected the profile sync to return, got " + failure);
-        assertTrue(lastCallMillis < CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS,
-                "The profile sync waited " + lastCallMillis + " ms, as long as an admin call.");
+        Call call = call(this::profileSync);
+        assertTrue(call.failure == null, "Expected the profile sync to return, got " + call.failure);
+        assertEndedAfter(call, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS,
+                CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS);
     }
 
-    // A socket timeout ends a call only after it, so a shorter call did not use the admin timeout.
-    private void assertWaitedForTheAdminTimeout() {
+    @Test
+    public void testTheConfiguredReadTimeoutIsUsed() throws Exception {
 
-        assertTrue(lastCallMillis >= CDSHttpClient.ADMIN_SOCKET_TIMEOUT_MILLIS,
-                "The admin call ended after " + lastCallMillis + " ms, before the admin socket timeout.");
+        properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, "1500");
+
+        Call call = call(this::profileSync);
+        assertTrue(call.failure == null, "Expected the profile sync to return, got " + call.failure);
+        assertEndedAfter(call, 1500, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
     }
 
-    /**
-     * Run a call on another thread and wait for it up to the limit. The static mocks are opened on that thread,
-     * as Mockito applies a static mock only on the thread that opened it.
-     *
-     * @return The exception the call threw, or null if it returned.
-     */
-    private Throwable callWithinLimit(Callable<?> call) throws InterruptedException {
+    // With a pool of one connection, a second call waits for the connection the first one holds, up to the
+    // connection request timeout, and then gives up without reaching CDS.
+    @Test
+    public void testTheConfiguredPoolSizeAndConnectionRequestTimeoutAreUsed() throws Exception {
 
-        long start = System.nanoTime();
-        Future<?> result = caller.submit(() -> {
-            try (MockedStatic<Utils> utils = mockStatic(Utils.class, Mockito.CALLS_REAL_METHODS);
-                 MockedStatic<OrganizationPathResolver> pathResolver = mockStatic(OrganizationPathResolver.class)) {
-                utils.when(Utils::getCDSServiceURL).thenReturn("http://127.0.0.1:" + stalledCds.getLocalPort());
-                utils.when(Utils::getBase64EncodedCredentials).thenReturn("dXNlcjpwYXNz");
-                pathResolver.when(() -> OrganizationPathResolver.pathOf(TENANT)).thenReturn("/t/" + TENANT);
-                return call.call();
-            }
-        });
+        properties.put(CDSHttpClient.MAX_CONNECTIONS_PROPERTY, "1");
+        properties.put(CDSHttpClient.CONNECTION_REQUEST_TIMEOUT_PROPERTY, "500");
+        properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, "5000");
+
+        Future<Call> first = submit(this::profileSync);
+        waitForConnections(1);
+        Call second = call(this::profileSync);
+
+        assertTrue(second.failure == null, "Expected the profile sync to return, got " + second.failure);
+        assertEndedAfter(second, 500, 2000);
+        assertTrue(heldConnections.size() == 1, "The second call opened a connection to CDS: "
+                + heldConnections.size() + " connections.");
+        Call firstCall = first.get(CALL_LIMIT_SECONDS, TimeUnit.SECONDS);
+        assertEndedAfter(firstCall, 5000, CALL_LIMIT_SECONDS * 1000);
+    }
+
+    private Object profileSync() {
+
+        CDSClient.triggerProfileSync("POST_ADD_USER", new HashMap<>(), TENANT);
+        return null;
+    }
+
+    // A timeout ends a call only after it has passed, and a call that ended long after did not use it.
+    private static void assertEndedAfter(Call call, long atLeastMillis, long beforeMillis) {
+
+        assertTrue(call.millis >= atLeastMillis, "The call ended after " + call.millis + " ms, before "
+                + atLeastMillis + " ms.");
+        assertTrue(call.millis < beforeMillis, "The call ended after " + call.millis + " ms, not before "
+                + beforeMillis + " ms.");
+    }
+
+    private void waitForConnections(int count) throws InterruptedException {
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (heldConnections.size() < count && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertTrue(heldConnections.size() >= count, "CDS got " + heldConnections.size() + " connections.");
+    }
+
+    private Call call(Callable<?> body) throws Exception {
+
         try {
-            result.get(CALL_LIMIT_SECONDS, TimeUnit.SECONDS);
-            return null;
-        } catch (ExecutionException e) {
-            return e.getCause();
+            return submit(body).get(CALL_LIMIT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             fail("The call to CDS was still waiting after " + CALL_LIMIT_SECONDS + " seconds.");
             return null;
-        } finally {
-            lastCallMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
-            LOG.info("[CDSClientTimeoutTest] call ended after " + lastCallMillis + " ms");
+        }
+    }
+
+    /**
+     * Run a call on another thread. The static mocks are opened on that thread, as Mockito applies a static mock
+     * only on the thread that opened it.
+     */
+    private Future<Call> submit(Callable<?> body) {
+
+        return caller.submit(() -> {
+            long start = System.nanoTime();
+            Throwable failure = null;
+            try (MockedStatic<Utils> utils = mockStatic(Utils.class, Mockito.CALLS_REAL_METHODS);
+                 MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class);
+                 MockedStatic<OrganizationPathResolver> pathResolver = mockStatic(OrganizationPathResolver.class)) {
+                utils.when(Utils::getCDSServiceURL).thenReturn("http://127.0.0.1:" + stalledCds.getLocalPort());
+                utils.when(Utils::getBase64EncodedCredentials).thenReturn("dXNlcjpwYXNz");
+                identityUtil.when(() -> IdentityUtil.getProperty(anyString()))
+                        .thenAnswer(invocation -> properties.get(invocation.<String>getArgument(0)));
+                pathResolver.when(() -> OrganizationPathResolver.pathOf(TENANT)).thenReturn("/t/" + TENANT);
+                body.call();
+            } catch (Exception e) {
+                failure = e;
+            }
+            long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            LOG.info("[CDSClientTimeoutTest] call ended after " + millis + " ms");
+            return new Call(millis, failure);
+        });
+    }
+
+    private static final class Call {
+
+        private final long millis;
+        private final Throwable failure;
+
+        private Call(long millis, Throwable failure) {
+
+            this.millis = millis;
+            this.failure = failure;
         }
     }
 }

@@ -18,34 +18,47 @@
 
 package org.wso2.identity.cds.client;
 
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
+
+import java.io.IOException;
 
 /**
  * The HTTP client of the calls to CDS. Without timeouts, a CDS that accepts a connection but does not respond holds
  * the calling thread, such as the thread of a sign-in, for as long as it does not respond. The client is shared, so
  * its connection pool also limits how many connections the Identity Server opens to CDS.
+ * <p>
+ * The timeouts, except the one of the admin calls, and the size of the pool are read from
+ * [customer_data_service.http_client] of deployment.toml, when the client is first used. A value that is not set,
+ * or is not a positive whole number, takes the default.
  */
 final class CDSHttpClient {
 
+    private static final Log log = LogFactory.getLog(CDSHttpClient.class);
+
     // Time to open the connection to CDS.
-    static final int CONNECT_TIMEOUT_MILLIS = 2000;
+    static final String CONNECT_TIMEOUT_PROPERTY = "CustomerDataService.HTTPClient.ConnectionTimeout";
+    static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 2000;
     // Time to wait for data from CDS, between two packets of the response.
-    static final int SOCKET_TIMEOUT_MILLIS = 3000;
+    static final String SOCKET_TIMEOUT_PROPERTY = "CustomerDataService.HTTPClient.ReadTimeout";
+    static final int DEFAULT_SOCKET_TIMEOUT_MILLIS = 3000;
     // The same for the calls an admin makes and waits for, as CDS calls the Identity Server back before it
     // responds to them.
     static final int ADMIN_SOCKET_TIMEOUT_MILLIS = 10000;
     // Time to wait for a free connection of the pool, when all of them are in use.
-    static final int CONNECTION_REQUEST_TIMEOUT_MILLIS = 1000;
+    static final String CONNECTION_REQUEST_TIMEOUT_PROPERTY =
+            "CustomerDataService.HTTPClient.ConnectionRequestTimeout";
+    static final int DEFAULT_CONNECTION_REQUEST_TIMEOUT_MILLIS = 1000;
     // All the calls go to the one CDS, so the limit of the pool and of the route is the same.
-    static final int MAX_CONNECTIONS = 20;
+    static final String MAX_CONNECTIONS_PROPERTY = "CustomerDataService.HTTPClient.ConnectionPoolSize";
+    static final int DEFAULT_MAX_CONNECTIONS = 20;
 
-    private static final RequestConfig ADMIN_REQUEST_CONFIG = RequestConfig.copy(requestConfig())
-            .setSocketTimeout(ADMIN_SOCKET_TIMEOUT_MILLIS)
-            .build();
-
-    private static volatile CloseableHttpClient client;
+    private static volatile Settings settings;
 
     private CDSHttpClient() {
     }
@@ -57,27 +70,17 @@ final class CDSHttpClient {
      */
     static CloseableHttpClient get() {
 
-        if (client == null) {
-            synchronized (CDSHttpClient.class) {
-                if (client == null) {
-                    client = HttpClients.custom()
-                            .setDefaultRequestConfig(requestConfig())
-                            .setMaxConnTotal(MAX_CONNECTIONS)
-                            .setMaxConnPerRoute(MAX_CONNECTIONS)
-                            .build();
-                }
-            }
-        }
-        return client;
+        return settings().client;
     }
 
+    /**
+     * Get the request config of the client: the connect, socket and connection request timeouts.
+     *
+     * @return The request config of the calls to CDS.
+     */
     static RequestConfig requestConfig() {
 
-        return RequestConfig.custom()
-                .setConnectTimeout(CONNECT_TIMEOUT_MILLIS)
-                .setSocketTimeout(SOCKET_TIMEOUT_MILLIS)
-                .setConnectionRequestTimeout(CONNECTION_REQUEST_TIMEOUT_MILLIS)
-                .build();
+        return settings().requestConfig;
     }
 
     /**
@@ -88,6 +91,116 @@ final class CDSHttpClient {
      */
     static RequestConfig adminRequestConfig() {
 
-        return ADMIN_REQUEST_CONFIG;
+        return settings().adminRequestConfig;
+    }
+
+    /**
+     * Get the limit of the connection pool of the client, which is also the limit of connections to CDS.
+     *
+     * @return The maximum number of connections to CDS.
+     */
+    static int maxConnections() {
+
+        return settings().maxConnections;
+    }
+
+    /**
+     * Close the client and forget the configuration, so the next call reads the configuration again and creates a
+     * new client. For tests.
+     */
+    static synchronized void reset() {
+
+        Settings current = settings;
+        settings = null;
+        if (current != null) {
+            try {
+                current.client.close();
+            } catch (IOException e) {
+                log.debug("Error while closing the HTTP client of the calls to CDS.", e);
+            }
+        }
+    }
+
+    private static Settings settings() {
+
+        Settings current = settings;
+        if (current == null) {
+            synchronized (CDSHttpClient.class) {
+                current = settings;
+                if (current == null) {
+                    current = new Settings();
+                    settings = current;
+                }
+            }
+        }
+        return current;
+    }
+
+    /**
+     * Read a positive whole number from identity.xml.
+     *
+     * @param property     Name of the property.
+     * @param defaultValue Value when the property is not set, or is not a positive whole number.
+     * @return The value of the property, or the default.
+     */
+    static int readPositiveInt(String property, int defaultValue) {
+
+        String value = StringUtils.trimToNull(IdentityUtil.getProperty(property));
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed > 0) {
+                return parsed;
+            }
+        } catch (NumberFormatException e) {
+            // Logged below, with the value that is not a number.
+        }
+        log.warn(String.format("%s is %s, which is not a positive whole number. The default, %d, is used.",
+                property, Utils.sanitizeForLog(value), defaultValue));
+        return defaultValue;
+    }
+
+    /**
+     * The configuration and the client built from it. They are created together, so the client and the request
+     * configs always come from the same values.
+     */
+    private static final class Settings {
+
+        private final int maxConnections;
+        private final RequestConfig requestConfig;
+        private final RequestConfig adminRequestConfig;
+        private final CloseableHttpClient client;
+
+        private Settings() {
+
+            int connectTimeout = readPositiveInt(CONNECT_TIMEOUT_PROPERTY, DEFAULT_CONNECT_TIMEOUT_MILLIS);
+            int socketTimeout = readPositiveInt(SOCKET_TIMEOUT_PROPERTY, DEFAULT_SOCKET_TIMEOUT_MILLIS);
+            int connectionRequestTimeout = readPositiveInt(CONNECTION_REQUEST_TIMEOUT_PROPERTY,
+                    DEFAULT_CONNECTION_REQUEST_TIMEOUT_MILLIS);
+            maxConnections = readPositiveInt(MAX_CONNECTIONS_PROPERTY, DEFAULT_MAX_CONNECTIONS);
+
+            requestConfig = RequestConfig.custom()
+                    .setConnectTimeout(connectTimeout)
+                    .setSocketTimeout(socketTimeout)
+                    .setConnectionRequestTimeout(connectionRequestTimeout)
+                    .build();
+            adminRequestConfig = RequestConfig.copy(requestConfig)
+                    .setSocketTimeout(ADMIN_SOCKET_TIMEOUT_MILLIS)
+                    .build();
+            client = HttpClients.custom()
+                    .setDefaultRequestConfig(requestConfig)
+                    .setMaxConnTotal(maxConnections)
+                    .setMaxConnPerRoute(maxConnections)
+                    .build();
+
+            if (log.isDebugEnabled()) {
+                log.debug(String.format("Created the HTTP client of the calls to CDS. Connection timeout: %d ms, "
+                                + "read timeout: %d ms, admin read timeout: %d ms, connection request timeout: %d ms, "
+                                + "connection pool size: %d.", connectTimeout, socketTimeout,
+                        ADMIN_SOCKET_TIMEOUT_MILLIS, connectionRequestTimeout, maxConnections));
+            }
+        }
     }
 }
