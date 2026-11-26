@@ -34,6 +34,9 @@ import org.wso2.identity.cds.config.mgt.CDSConfigService;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -44,6 +47,7 @@ import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.AUTHENTICATION_SUCCESS;
+import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.SESSION_EXPIRE;
 import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.SESSION_TERMINATE;
 
 public class AuthEventListenerTest {
@@ -134,6 +138,54 @@ public class AuthEventListenerTest {
         Map<String, Object> payload = capturedPayload(SESSION_TERMINATE);
         assertFalse(payload.containsKey(AuthEventListener.PROFILE_COOKIE));
         assertEquals(payload.get(AuthEventListener.USER_ID), USER_ID);
+    }
+
+    @Test
+    public void testSessionExpirySendsTheUserOfTheExpiredSessionAndTheCookie() throws Exception {
+
+        AuthenticatedUser expiredSessionUser = mock(AuthenticatedUser.class);
+        when(expiredSessionUser.getUserId()).thenReturn(USER_ID);
+        when(context.getLastAuthenticatedUser()).thenReturn(null);
+        when(context.getAuthenticationRequest()).thenReturn(null);
+        when(context.getSubject()).thenReturn(expiredSessionUser);
+
+        listener.handleEvent(expiryEvent(new Cookie("other", "value"), new Cookie(CDS_PROFILE, COOKIE_VALUE)));
+
+        Map<String, Object> payload = capturedPayload(SESSION_EXPIRE);
+        assertEquals(payload.get(AuthEventListener.PROFILE_COOKIE), COOKIE_VALUE);
+        assertEquals(payload.get(AuthEventListener.USER_ID), USER_ID);
+        assertEquals(payload.get(AuthEventListener.ORG_HANDLE), TENANT_DOMAIN);
+    }
+
+    @Test
+    public void testSessionExpiryWithoutACookieSendsNothing() throws Exception {
+
+        AuthenticatedUser expiredSessionUser = mock(AuthenticatedUser.class);
+        when(expiredSessionUser.getUserId()).thenReturn(USER_ID);
+        when(context.getSubject()).thenReturn(expiredSessionUser);
+
+        listener.handleEvent(expiryEvent(new Cookie("other", "value")));
+
+        cdsClient.verify(() -> CDSClient.triggerIdentityDataSync(anyString(), anyMap(), anyString()), never());
+    }
+
+    @Test
+    public void testSessionExpiryWithoutAUserSendsNothing() throws Exception {
+
+        when(context.getSubject()).thenReturn(null);
+
+        listener.handleEvent(expiryEvent(new Cookie(CDS_PROFILE, COOKIE_VALUE)));
+
+        cdsClient.verify(() -> CDSClient.triggerIdentityDataSync(anyString(), anyMap(), anyString()), never());
+    }
+
+    private Event expiryEvent(Cookie... cookies) {
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getCookies()).thenReturn(cookies);
+        Event event = event(SESSION_EXPIRE);
+        event.getEventProperties().put("request", request);
+        return event;
     }
 
     private void setQueryParam(String value) {
