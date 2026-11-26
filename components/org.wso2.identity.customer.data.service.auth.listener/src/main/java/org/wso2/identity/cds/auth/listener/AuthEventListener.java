@@ -24,6 +24,7 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
 import org.wso2.carbon.identity.application.authentication.framework.exception.UserIdNotFoundException;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.event.IdentityEventConstants;
 import org.wso2.carbon.identity.event.IdentityEventException;
 import org.wso2.carbon.identity.event.event.Event;
 import org.wso2.carbon.identity.event.handler.AbstractEventHandler;
@@ -35,12 +36,16 @@ import org.wso2.identity.cds.config.mgt.exception.CDSConfigMgtException;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+
 import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.AUTHENTICATION_SUCCESS;
+import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.SESSION_EXPIRE;
 import static org.wso2.carbon.identity.event.IdentityEventConstants.Event.SESSION_TERMINATE;
 
 /**
  * This class contains the implementation of the Authentication event listener.
- * This handles authentication success events and communicates to CDS.
+ * This handles authentication success, session termination and session expiry events and communicates to CDS.
  */
 public class AuthEventListener extends AbstractEventHandler {
 
@@ -151,6 +156,67 @@ public class AuthEventListener extends AbstractEventHandler {
                 }
             }
         }
+
+        if (SESSION_EXPIRE.equals(event.getEventName())) {
+            handleSessionExpiry(event, authContext);
+        }
+    }
+
+    /**
+     * IS fires SESSION_EXPIRE when a browser comes back with a session that has timed out, before the user signs in
+     * again. The context is the one of the new sign-in: the user of the expired session is its subject, and it does
+     * not carry the request headers yet, so the cds_profile cookie is taken from the request of the event.
+     *
+     * @param event   Session expiry event.
+     * @param context Authentication context of the new sign-in.
+     */
+    private void handleSessionExpiry(Event event, AuthenticationContext context) {
+
+        AuthenticatedUser expiredSessionUser = context.getSubject();
+        if (expiredSessionUser == null) {
+            LOG.debug("No user found for the expired session.");
+            return;
+        }
+        String userId;
+        try {
+            userId = expiredSessionUser.getUserId();
+        } catch (UserIdNotFoundException e) {
+            LOG.debug("User ID not found for the expired session.");
+            return;
+        }
+        if (StringUtils.isBlank(userId)) {
+            LOG.debug("User ID is blank for the expired session.");
+            return;
+        }
+        Object request = event.getEventProperties().get(IdentityEventConstants.EventProperty.REQUEST);
+        String cookieValue = null;
+        if (request instanceof HttpServletRequest) {
+            cookieValue = getCookieValue((HttpServletRequest) request, CDS_PROFILE_COOKIE);
+        }
+        if (StringUtils.isBlank(cookieValue)) {
+            LOG.debug("No cds profile cookie found in the request of the expired session.");
+            return;
+        }
+
+        String tenant = context.getTenantDomain();
+        Map<String, Object> profileSyncPayload = new HashMap<>();
+        profileSyncPayload.put(USER_ID, userId);
+        profileSyncPayload.put(ORG_HANDLE, tenant);
+        profileSyncPayload.put(PROFILE_COOKIE, cookieValue);
+        CDSClient.triggerIdentityDataSync(event.getEventName(), profileSyncPayload, tenant);
+    }
+
+    private String getCookieValue(HttpServletRequest request, String cookieName) {
+
+        if (request.getCookies() == null) {
+            return null;
+        }
+        for (Cookie cookie : request.getCookies()) {
+            if (cookieName.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
     private String extractCookieValue(String cookieHeader, String cookieName) {
