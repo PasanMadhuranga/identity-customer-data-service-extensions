@@ -25,7 +25,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -52,7 +51,7 @@ public class CDSClient {
     private static final String PROFILE_SCHEMA_SYNC_API = "%s%s/cds/api/v1/profile-schema/sync";
     private static final String ORGANIZATION_SYNC_API = "%s%s/cds/api/v1/organizations/event-sync";
     // The CDS config is set on the root organization only.
-    private static final String CONFIG_API = "%s/t/%s/cds/api/v1/config";
+    private static final String CONFIG_SYNC_API = "%s/t/%s/cds/api/v1/config/sync";
     private static final String CDS_ENABLED = "cds_enabled";
     // Service credentials are synced on the root organization only.
     private static final String SERVICE_CREDENTIALS_SYNC_API = "%s/t/%s/cds/api/v1/service-credentials/sync";
@@ -141,7 +140,7 @@ public class CDSClient {
     }
 
     /**
-     * Send the CDS enable config of a tenant to CDS with PATCH /config. The call is synchronous, so the caller
+     * Send the CDS enable config of a tenant to CDS with POST /config/sync. The call is synchronous, so the caller
      * knows if CDS accepted the value.
      *
      * @param tenant     Tenant domain.
@@ -160,14 +159,14 @@ public class CDSClient {
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
         try (CloseableHttpClient client = ClientCertificate.newHttpClient()) {
-            HttpPatch httpPatch = new HttpPatch(String.format(CONFIG_API, serviceURL, tenant));
-            httpPatch.setEntity(new StringEntity(
+            HttpPost httpPost = new HttpPost(String.format(CONFIG_SYNC_API, serviceURL, tenant));
+            httpPost.setEntity(new StringEntity(
                     MAPPER.writeValueAsString(Collections.singletonMap(CDS_ENABLED, cdsEnabled)),
                     StandardCharsets.UTF_8));
-            httpPatch.setHeader(CONTENT_TYPE, APPLICATION_JSON);
-            httpPatch.setHeader(AUTHORIZATION, "Basic " + credentials);
+            httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
+            httpPost.setHeader(AUTHORIZATION, "Basic " + credentials);
 
-            try (CloseableHttpResponse response = client.execute(httpPatch)) {
+            try (CloseableHttpResponse response = client.execute(httpPost)) {
                 int statusCode = response.getStatusLine().getStatusCode();
                 if (statusCode == HTTP_OK) {
                     if (log.isDebugEnabled()) {
