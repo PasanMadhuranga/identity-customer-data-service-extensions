@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,12 +123,13 @@ public class CDSClientTimeoutTest {
         assertEndedAfter(call, CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS, CALL_LIMIT_SECONDS * 1000);
     }
 
-    // The sync events log the failure and return, so the sign-in or user operation that sent them goes on.
+    // The sync events log the failure and return, so the sign-in or user operation that sent them goes on. A sign-in
+    // sync is sent once, so it ends after one read timeout.
     @Test
-    public void testProfileSyncEndsAfterTheDefaultReadTimeout() throws Exception {
+    public void testASignInSyncEndsAfterTheDefaultReadTimeout() throws Exception {
 
-        Call call = call(this::profileSync);
-        assertTrue(call.failure == null, "Expected the profile sync to return, got " + call.failure);
+        Call call = call(this::signInSync);
+        assertTrue(call.failure == null, "Expected the sign-in sync to return, got " + call.failure);
         assertEndedAfter(call, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS,
                 CDSHttpClient.DEFAULT_ADMIN_SOCKET_TIMEOUT_MILLIS);
     }
@@ -157,9 +159,26 @@ public class CDSClientTimeoutTest {
 
         properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, "1500");
 
-        Call call = call(this::profileSync);
-        assertTrue(call.failure == null, "Expected the profile sync to return, got " + call.failure);
+        Call call = call(this::signInSync);
+        assertTrue(call.failure == null, "Expected the sign-in sync to return, got " + call.failure);
         assertEndedAfter(call, 1500, CDSHttpClient.DEFAULT_SOCKET_TIMEOUT_MILLIS);
+    }
+
+    // The sync of a user deletion is sent again once, so when CDS never responds it ends after two read timeouts.
+    @Test
+    public void testADeleteUserSyncEndsAfterTwoReadTimeouts() throws Exception {
+
+        properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, "1500");
+
+        Call call = call(() -> {
+            CDSClient.triggerIdentityDataSync("POST_DELETE_USER_WITH_ID",
+                    new HashMap<>(Collections.singletonMap("userId", "acme-user-id")), TENANT);
+            return null;
+        });
+        assertTrue(call.failure == null, "Expected the user sync to return, got " + call.failure);
+        assertEndedAfter(call, 2 * 1500, 3 * 1500);
+        assertTrue(heldConnections.size() == 2, "Expected two attempts, CDS got " + heldConnections.size()
+                + " connections.");
     }
 
     // With a pool of one connection, a second call waits for the connection the first one holds, up to the
@@ -171,11 +190,11 @@ public class CDSClientTimeoutTest {
         properties.put(CDSHttpClient.CONNECTION_REQUEST_TIMEOUT_PROPERTY, "500");
         properties.put(CDSHttpClient.SOCKET_TIMEOUT_PROPERTY, "5000");
 
-        Future<Call> first = submit(this::profileSync);
+        Future<Call> first = submit(this::signInSync);
         waitForConnections(1);
-        Call second = call(this::profileSync);
+        Call second = call(this::signInSync);
 
-        assertTrue(second.failure == null, "Expected the profile sync to return, got " + second.failure);
+        assertTrue(second.failure == null, "Expected the sign-in sync to return, got " + second.failure);
         assertEndedAfter(second, 500, 2000);
         assertTrue(heldConnections.size() == 1, "The second call opened a connection to CDS: "
                 + heldConnections.size() + " connections.");
@@ -183,9 +202,9 @@ public class CDSClientTimeoutTest {
         assertEndedAfter(firstCall, 5000, CALL_LIMIT_SECONDS * 1000);
     }
 
-    private Object profileSync() {
+    private Object signInSync() {
 
-        CDSClient.triggerProfileSync("POST_ADD_USER", new HashMap<>(), TENANT);
+        CDSClient.triggerIdentityDataSync("AUTHENTICATION_SUCCESS", new HashMap<>(), TENANT);
         return null;
     }
 
