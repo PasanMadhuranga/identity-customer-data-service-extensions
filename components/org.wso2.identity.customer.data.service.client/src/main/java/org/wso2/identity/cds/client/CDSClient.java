@@ -28,7 +28,6 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.identity.organization.management.service.exception.OrganizationManagementException;
 import org.wso2.identity.cds.client.exception.CDSClientException;
 import org.wso2.identity.cds.client.exception.CDSException;
@@ -159,7 +158,7 @@ public class CDSClient {
         }
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
+        try (CloseableHttpClient client = ClientCertificate.newHttpClient()) {
             HttpPost httpPost = new HttpPost(String.format(CONFIG_SYNC_API, serviceURL, tenant));
             httpPost.setEntity(new StringEntity(
                     MAPPER.writeValueAsString(Collections.singletonMap(CDS_ENABLED, cdsEnabled)),
@@ -200,7 +199,7 @@ public class CDSClient {
     private static void doPost(String url, String jsonBody, String tenant, String operation) throws IOException {
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
+        try (CloseableHttpClient client = ClientCertificate.newHttpClient()) {
             HttpPost httpPost = new HttpPost(url);
             httpPost.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
             httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
@@ -286,7 +285,7 @@ public class CDSClient {
         event.put(CLIENT_SECRET, clientSecret);
 
         String sanitizedTenant = Utils.sanitizeForLog(tenant);
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
+        try (CloseableHttpClient client = ClientCertificate.newHttpClient()) {
             HttpPost httpPost = new HttpPost(String.format(SERVICE_CREDENTIALS_SYNC_API, serviceURL, tenant));
             httpPost.setEntity(new StringEntity(MAPPER.writeValueAsString(event), StandardCharsets.UTF_8));
             httpPost.setHeader(CONTENT_TYPE, APPLICATION_JSON);
