@@ -23,10 +23,13 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 
 import java.io.IOException;
+
+import javax.net.ssl.SSLContext;
 
 /**
  * The HTTP client of the calls to CDS. Without timeouts, a CDS that accepts a connection but does not respond holds
@@ -35,6 +38,9 @@ import java.io.IOException;
  * <p>
  * The timeouts and the size of the pool are read from [customer_data_service.http_client] of deployment.toml, when
  * the client is first used. A value that is not set, or is not a positive whole number, takes the default.
+ * <p>
+ * The client presents the client certificate of {@link ClientCertificate}. When its key pair cannot be loaded, the
+ * client presents none, and the key pair is read again on the next call until it loads.
  */
 final class CDSHttpClient {
 
@@ -70,7 +76,7 @@ final class CDSHttpClient {
      */
     static CloseableHttpClient get() {
 
-        return settings().client;
+        return settings(true).client;
     }
 
     /**
@@ -80,7 +86,7 @@ final class CDSHttpClient {
      */
     static RequestConfig requestConfig() {
 
-        return settings().requestConfig;
+        return settings(false).requestConfig;
     }
 
     /**
@@ -91,7 +97,7 @@ final class CDSHttpClient {
      */
     static RequestConfig adminRequestConfig() {
 
-        return settings().adminRequestConfig;
+        return settings(false).adminRequestConfig;
     }
 
     /**
@@ -101,7 +107,7 @@ final class CDSHttpClient {
      */
     static int maxConnections() {
 
-        return settings().maxConnections;
+        return settings(false).maxConnections;
     }
 
     /**
@@ -121,19 +127,36 @@ final class CDSHttpClient {
         }
     }
 
-    private static Settings settings() {
+    /**
+     * Get the settings, creating them on first use.
+     *
+     * @param loadClientCertificate Whether to read the key pair of the client certificate again when it did not load
+     *                              before. Only the call that gets the client does, so a call to CDS reads it, and
+     *                              logs that it cannot, once.
+     * @return The settings.
+     */
+    private static Settings settings(boolean loadClientCertificate) {
 
         Settings current = settings;
-        if (current == null) {
-            synchronized (CDSHttpClient.class) {
-                current = settings;
-                if (current == null) {
-                    current = new Settings();
+        if (current != null && (current.sslContextLoaded || !loadClientCertificate)) {
+            return current;
+        }
+        synchronized (CDSHttpClient.class) {
+            current = settings;
+            if (current == null) {
+                current = new Settings(ClientCertificate.getSSLContext());
+                settings = current;
+            } else if (!current.sslContextLoaded && loadClientCertificate) {
+                SSLContext sslContext = ClientCertificate.getSSLContext();
+                if (sslContext != null) {
+                    // The previous client is not closed, as calls in progress may still use it. Its connections
+                    // are closed when it is garbage collected.
+                    current = new Settings(current, sslContext);
                     settings = current;
                 }
             }
+            return current;
         }
-        return current;
     }
 
     /**
@@ -162,6 +185,23 @@ final class CDSHttpClient {
         return defaultValue;
     }
 
+    private static CloseableHttpClient buildClient(RequestConfig requestConfig, int maxConnections,
+                                                   SSLContext sslContext) {
+
+        // Without connection state, a connection that presented the client certificate is reused: HttpClient would
+        // otherwise tag it with the principal of the certificate, which no later call asks for, and open a connection
+        // per call. Every call presents the same certificate, so the connections need no state.
+        HttpClientBuilder builder = HttpClients.custom()
+                .setDefaultRequestConfig(requestConfig)
+                .setMaxConnTotal(maxConnections)
+                .setMaxConnPerRoute(maxConnections)
+                .disableConnectionState();
+        if (sslContext != null) {
+            builder.setSSLContext(sslContext);
+        }
+        return builder.build();
+    }
+
     /**
      * The configuration and the client built from it. They are created together, so the client and the request
      * configs always come from the same values.
@@ -172,8 +212,24 @@ final class CDSHttpClient {
         private final RequestConfig requestConfig;
         private final RequestConfig adminRequestConfig;
         private final CloseableHttpClient client;
+        private final boolean sslContextLoaded;
 
-        private Settings() {
+        /**
+         * The same configuration, with a client that presents the client certificate, which did not load before.
+         */
+        private Settings(Settings previous, SSLContext sslContext) {
+
+            maxConnections = previous.maxConnections;
+            requestConfig = previous.requestConfig;
+            adminRequestConfig = previous.adminRequestConfig;
+            client = buildClient(requestConfig, maxConnections, sslContext);
+            sslContextLoaded = true;
+            if (log.isDebugEnabled()) {
+                log.debug("Created the HTTP client of the calls to CDS again, as the client certificate loaded.");
+            }
+        }
+
+        private Settings(SSLContext sslContext) {
 
             int connectTimeout = readPositiveInt(CONNECT_TIMEOUT_PROPERTY, DEFAULT_CONNECT_TIMEOUT_MILLIS);
             int socketTimeout = readPositiveInt(SOCKET_TIMEOUT_PROPERTY, DEFAULT_SOCKET_TIMEOUT_MILLIS);
@@ -191,17 +247,15 @@ final class CDSHttpClient {
             adminRequestConfig = RequestConfig.copy(requestConfig)
                     .setSocketTimeout(adminSocketTimeout)
                     .build();
-            client = HttpClients.custom()
-                    .setDefaultRequestConfig(requestConfig)
-                    .setMaxConnTotal(maxConnections)
-                    .setMaxConnPerRoute(maxConnections)
-                    .build();
+            client = buildClient(requestConfig, maxConnections, sslContext);
+            sslContextLoaded = sslContext != null;
 
             if (log.isDebugEnabled()) {
                 log.debug(String.format("Created the HTTP client of the calls to CDS. Connection timeout: %d ms, "
                                 + "read timeout: %d ms, admin read timeout: %d ms, connection request timeout: %d ms, "
-                                + "connection pool size: %d.", connectTimeout, socketTimeout, adminSocketTimeout,
-                        connectionRequestTimeout, maxConnections));
+                                + "connection pool size: %d, client certificate loaded: %b.", connectTimeout,
+                        socketTimeout, adminSocketTimeout, connectionRequestTimeout, maxConnections,
+                        sslContextLoaded));
             }
         }
     }

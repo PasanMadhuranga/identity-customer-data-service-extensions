@@ -27,7 +27,9 @@ import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
+import org.wso2.carbon.identity.core.util.IdentityCoreInitializedEvent;
 import org.wso2.carbon.identity.organization.management.service.OrganizationManager;
+import org.wso2.identity.cds.client.Utils;
 
 /**
  * OSGi component that gives the CDS client the services that it uses.
@@ -40,6 +42,10 @@ public class CDSClientServiceComponent {
     @Activate
     protected void activate(ComponentContext context) {
 
+        String syncTarget = Utils.describeSyncTarget();
+        if (syncTarget != null) {
+            LOG.info(syncTarget);
+        }
         if (LOG.isDebugEnabled()) {
             LOG.debug("CDD client component is activated.");
         }
@@ -68,5 +74,27 @@ public class CDSClientServiceComponent {
     protected void unsetOrganizationManager(OrganizationManager organizationManager) {
 
         CDSClientDataHolder.getInstance().setOrganizationManager(null);
+    }
+
+    /**
+     * Waits for identity core, which loads the CustomerDataService properties that activate logs.
+     *
+     * @param identityCoreInitializedEvent Identity core is initialized.
+     */
+    @Reference(
+            name = "identity.core.init.event.service",
+            service = IdentityCoreInitializedEvent.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetIdentityCoreInitializedEventService"
+    )
+    protected void setIdentityCoreInitializedEventService(IdentityCoreInitializedEvent identityCoreInitializedEvent) {
+
+        // Referenced only so that the component activates after identity core.
+    }
+
+    protected void unsetIdentityCoreInitializedEventService(IdentityCoreInitializedEvent identityCoreInitializedEvent) {
+
+        // Referenced only so that the component activates after identity core.
     }
 }
